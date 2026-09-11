@@ -1,0 +1,27 @@
+{
+  "name": "@ixoris/database",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "seed": "tsx seed/seed.ts"
+  },
+  "dependencies": {
+    "@ixoris/accounting-engine": "workspace:*",
+    "@ixoris/payroll-engine": "workspace:*",
+    "@ixoris/rbac": "workspace:*",
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.14.0",
+    "prisma": "^5.22.0",
+    "tsx": "^4.16.0"
+  }
+}

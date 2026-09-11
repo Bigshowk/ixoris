@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"/c/Program Files/nodejs/npx.cmd\" pnpm@9 install --filter @ixoris/web)"
+    ]
+  }
+}

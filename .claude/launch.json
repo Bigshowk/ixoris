@@ -1,0 +1,29 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/web"],
+      "port": 3000
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/.pnpm/ts-node@10.9.2_@types+node@20.19.43_typescript@5.9.3/node_modules/ts-node/dist/bin.js", "apps/api/src/main.ts"],
+      "port": 4000
+    },
+    {
+      "name": "pos",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/pos"],
+      "port": 3001
+    },
+    {
+      "name": "delivery",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "apps/delivery"],
+      "port": 3002
+    }
+  ]
+}
