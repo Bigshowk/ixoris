@@ -21,7 +21,7 @@ Logistique) — architecture cross-platform, synchronisée en temps réel, offli
 ```
 PROJET-IXORIS/
 ├── apps/
-│   ├── web/                    # Back-office Next.js (compta, RH, CRM, stock, dashboards) — à construire
+│   ├── web/                    # Back-office Next.js (compta, RH, CRM, stock, dashboards)
 │   ├── pos/                    # PWA caisse (scan, vente rapide, offline-first, thème + i18n)
 │   ├── delivery/                # PWA chauffeur (tournée, statuts temps réel, PoD signature/QR)
 │   └── api/                    # Backend NestJS (REST + WebSocket Gateway)
@@ -101,19 +101,139 @@ Toutes les extensions des sections 8-13, ainsi que `User.locale`/`themePreferenc
 - **Trésorerie sans relation polymorphe** : `Register`, `CashBox` et `BankAccount` portent chacun un `glAccountId` vers `Account` — `CashTransfer` référence donc directement `fromAccountId`/`toAccountId` (deux comptes), sans avoir besoin d'un lien polymorphe vers le type de caisse.
 - **Amortissements et exercices futurs** : un plan d'amortissement est généré en une fois sur toute la durée de vie du bien (potentiellement 5-10 ans), donc avant que les `FiscalYear` correspondants existent forcément. `DepreciationEntry.fiscalYearId` est donc optionnel — `periodEndDate` (calculée à la génération) fait foi pour savoir quand une ligne est due, et l'exercice n'est résolu qu'au moment du postage effectif.
 
-## Démarrage (une fois le code applicatif généré)
+## Démarrage
+
+### 1. Prérequis
+
+| Outil | Version | Vérifier avec |
+|---|---|---|
+| Node.js | ≥ 20.0.0 | `node -v` |
+| pnpm | 9.x (le monorepo épingle `pnpm@9.0.0` dans `package.json`) | `pnpm -v` |
+| PostgreSQL | 16 | `psql --version` (si install native) |
+| Redis | 7 | `redis-cli ping` (si install native) |
+| Git | — | `git --version` |
+
+Pas de pnpm en local ? `corepack enable` (fourni avec Node ≥ 16.13) active automatiquement la bonne version épinglée dans `package.json`, sans installation globale séparée.
+
+### 2. Base de données et cache — deux options
+
+**Option A — Docker (recommandé, le plus simple)**
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d
+```
+
+Démarre Postgres 16 (`localhost:5432`, user/pass/db `ixoris`/`ixoris`/`ixoris_erp`), Redis 7 (`localhost:6379`) et Adminer (`localhost:8080`, interface web d'admin DB) — identifiants déjà cohérents avec `.env.example`, aucune config à toucher.
+
+**Option B — Installation native (sans Docker)**
+
+Si Docker n'est pas disponible sur la machine (c'est le cas de l'environnement où ce projet a été développé et testé) :
+
+1. Installer PostgreSQL 16 et Redis 7 nativement.
+2. Créer le rôle et la base attendus par `.env` :
+   ```sql
+   CREATE ROLE ixoris WITH LOGIN PASSWORD 'ixoris';
+   CREATE DATABASE ixoris_erp OWNER ixoris;
+   ```
+   Exemple avec `psql` (adapter le chemin selon l'OS — sur Windows, typiquement `C:\Program Files\PostgreSQL\16\bin\psql.exe`) :
+   ```bash
+   psql -U postgres -c "CREATE ROLE ixoris WITH LOGIN PASSWORD 'ixoris';"
+   psql -U postgres -c "CREATE DATABASE ixoris_erp OWNER ixoris;"
+   ```
+3. S'assurer que les deux services tournent avant de lancer l'API :
+   ```bash
+   # Windows (pg_ctl) :
+   pg_ctl status -D "C:\Program Files\PostgreSQL\16\data"
+   pg_ctl start -D "C:\Program Files\PostgreSQL\16\data" -l pg_log.log   # si arrêté
+
+   # macOS/Linux :
+   pg_isready
+   redis-cli ping   # doit répondre "PONG"
+   ```
+   Redis n'est utilisé aujourd'hui que par les hooks réservés au multi-instance (pub/sub temps réel) — son absence ne bloque pas le démarrage de l'API en mono-instance, mais mieux vaut le démarrer pour rester fidèle à l'architecture cible.
+
+### 3. Variables d'environnement
+
+```bash
 cp .env.example .env
+```
+
+Le fichier `.env` (racine, lu par toutes les apps via Turborepo) contient :
+
+| Variable | Rôle | Valeur par défaut (dev) |
+|---|---|---|
+| `DATABASE_URL` | Connexion Prisma → Postgres | `postgresql://ixoris:ixoris@localhost:5432/ixoris_erp` |
+| `REDIS_URL` | Connexion Redis | `redis://localhost:6379` |
+| `JWT_SECRET` | Signature des tokens d'accès/refresh | ⚠️ à changer en prod |
+| `JWT_EXPIRES_IN` / `REFRESH_TOKEN_EXPIRES_IN` | Durées de vie des tokens | `1d` / `30d` |
+| `API_PORT` | Port HTTP de `apps/api` | `4000` |
+| `CORS_ORIGIN` | Origines autorisées côté API | `http://localhost:3000,http://localhost:3001,http://localhost:3002` — **doit inclure le port de chaque frontend lancé** (web/pos/delivery) sous peine d'erreurs réseau silencieuses côté navigateur |
+| `NEXT_PUBLIC_API_URL` | URL de l'API vue par les frontends | `http://localhost:4000` |
+| `NEXT_PUBLIC_WS_URL` | URL du WebSocket (sync temps réel POS) | `ws://localhost:4001` |
+| `NOTIFICATION_MODE` | `log` (défaut, sûr) ou `live` (envoi réel SMTP/Twilio) | `log` |
+| `SMTP_*` / `TWILIO_*` | Identifiants des fournisseurs de notification réels | vides — uniquement nécessaires si `NOTIFICATION_MODE=live` |
+
+### 4. Installation des dépendances
+
+```bash
 pnpm install
-pnpm db:generate
-pnpm db:migrate
-pnpm db:seed
+```
+
+Installe toutes les dépendances de tous les workspaces (`apps/*`, `packages/*`) en une seule commande, avec un unique `node_modules` partagé (pnpm workspaces + hoisting).
+
+### 5. Base de données : génération, migrations, seed
+
+```bash
+pnpm db:generate   # génère le client Prisma (packages/database) à partir de schema.prisma
+pnpm db:migrate    # applique les migrations SQL (crée les tables) — prisma migrate dev
+pnpm db:seed       # peuple des données de démo (entreprise, magasin, produits, utilisateurs, etc.)
+```
+
+`db:generate` doit être relancé après tout `pull`/`checkout` qui modifie `packages/database/prisma/schema.prisma`, même sans nouvelle migration — le client Prisma généré (`.prisma/client`) n'est pas versionné.
+
+### 6. Lancer l'application
+
+**Tout en une fois (recommandé) :**
+
+```bash
 pnpm dev
 ```
 
-`pnpm dev` démarre tous les workspaces en parallèle (Turborepo) : API sur `:4000`, `apps/pos` sur `:3001`, `apps/delivery` sur `:3002`.
+Turborepo démarre en parallèle les 4 apps, chacune sur son port :
+
+| App | Commande interne | URL |
+|---|---|---|
+| `apps/api` (NestJS) | `nest start --watch` | http://localhost:4000 |
+| `apps/web` (back-office) | `next dev` | http://localhost:3000 |
+| `apps/pos` (caisse PWA) | `next dev -p 3001` | http://localhost:3001 |
+| `apps/delivery` (livreur PWA) | `next dev -p 3002` | http://localhost:3002 |
+
+**App par app (utile pour isoler un problème ou économiser des ressources) :**
+
+```bash
+pnpm --filter @ixoris/api run dev        # API seule, :4000
+pnpm --filter @ixoris/web run dev        # back-office seul, :3000
+pnpm --filter @ixoris/pos run dev        # caisse seule, :3001
+pnpm --filter @ixoris/delivery run dev   # app livreur seule, :3002
+```
+
+L'API doit tourner en premier (ou du moins avant qu'un frontend n'essaie de se connecter) — sans elle, les écrans de connexion afficheront des erreurs réseau génériques plutôt qu'un message explicite.
+
+### 7. Se connecter
+
+Une fois `pnpm db:seed` exécuté, utiliser les [identifiants de démonstration](#identifiants-de-démonstration-après-pnpm-dbseed) ci-dessous sur l'app correspondante :
+- back-office (`:3000`) → `admin@ixoris.dev`
+- caisse (`:3001`) → `caissier@ixoris.dev`
+- app livreur (`:3002`) → `livreur@ixoris.dev`
+
+### Dépannage
+
+- **`Can't reach database server at localhost:5432`** (erreur Prisma `P1001`) au démarrage de l'API — Postgres n'est pas démarré, ou vient tout juste de démarrer et n'accepte pas encore de connexions (race condition fréquente au boot). Vérifier avec `pg_ctl status` / `pg_isready`, réessayer quelques secondes après.
+- **`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`** (si l'API est lancée directement via `ts-node` plutôt que `nest start`) — Node refuse de "stripper" les types TypeScript d'un fichier atteint via un chemin `node_modules` (y compris un symlink de workspace pnpm). Ne pas créer d'imports package-spécifiques artificiels (ex. symlink manuel) entre packages internes du monorepo dans un contexte sans étape de build ; préférer un import relatif entre packages frères le cas échéant.
+- **Erreur CORS / requêtes qui échouent silencieusement depuis un frontend** — vérifier que le port de ce frontend figure bien dans `CORS_ORIGIN` (`.env`), et redémarrer l'API après modification (variable lue au boot, pas de hot-reload sur `.env`).
+- **La caisse ou l'app livreur affichent "Identifiants invalides" alors que le mot de passe est correct** — ces écrans affichent ce message générique pour *toute* erreur de connexion, y compris une API ou une base de données indisponibles à cet instant précis. Vérifier d'abord que l'API répond (`curl http://localhost:4000/auth/me` doit renvoyer un 401 JSON, pas une erreur de connexion) avant de suspecter les identifiants.
+- **Un frontend affiche une page blanche ou un contenu périmé après une modification de code** (particulièrement `apps/pos`, `apps/delivery`) — ces deux PWA enregistrent un service worker (`public/sw.js`) qui met en cache l'app-shell pour le mode hors-ligne. En dev, si le comportement semble figé après un changement, désinscrire le service worker et vider le cache depuis les DevTools du navigateur (Application → Service Workers → Unregister, puis Application → Storage → Clear site data), puis recharger.
+- **`pnpm install` échoue sans accès réseau** — s'assurer que `pnpm-lock.yaml` est présent et à jour ; sans accès registre npm, seules les dépendances déjà présentes dans le cache pnpm local peuvent être réutilisées (aucune nouvelle dépendance ne peut être ajoutée dans ce cas).
 
 ## État d'avancement
 
@@ -132,7 +252,8 @@ pnpm dev
 - ✅ **Contrôle du crédit & recouvrement — fonctionnel** : `apps/api/src/modules/credit-control` — échéanciers de paiement (`PaymentInstallment`, générés sur une facture validée, somme vérifiée contre le total TTC), blocage/déblocage manuel d'un client, et blocage **automatique** dès qu'une facture client validée dépasse `Customer.creditLimit` (vérifié à la création de facture et à la vente à crédit en caisse) ou qu'une facture est en retard critique (`POST /credit-control/run-overdue-check`, seuil configurable, 30 jours par défaut). Les relances d'impayés existantes (module CRM) n'ont pas été dupliquées.
 - ✅ **Actifs & amortissements (classe 2 OHADA) — fonctionnel** : `apps/api/src/modules/fixed-assets` — registre des immobilisations (`FixedAsset`, comptes classe 2/28 dédiés), génération du plan d'amortissement complet à la création (linéaire ou dégressif avec bascule automatique vers le linéaire en fin de vie, via `computeDepreciationSchedule` dans `packages/accounting-engine`), et **comptabilisation** des dotations dues (`POST /fixed-assets/depreciation/run`, débit 681 / crédit compte d'amortissement classe 28, comme les autres flux "à déclencher manuellement" du projet).
 - ✅ **GED & workflows d'approbation — fonctionnel** : `apps/api/src/modules/documents` — pièces jointes polymorphes (`Document.attachableType`/`attachableId`, même convention que `AuditLog`/`StockMovement`) attachables à une facture, écriture, employé, actif ou bon de commande ; règles d'approbation configurables par seuil (`ApprovalRule.minAmount` + rôle requis) sur les bons de commande et les dépenses de caisse — au-delà du seuil, l'envoi du bon de commande (`POST /supply-chain/purchase-orders/:id/send`) ou le postage de la dépense (`POST /treasury/cashboxes/movements/:id/post`) est retenu jusqu'à ce qu'un titulaire du rôle requis approuve (`POST /approvals/requests/:id/decide`).
-- ⏳ **À construire** : `apps/web` (back-office — tout est pour l'instant en JSON/PDF brut, pas d'écran), écrans d'administration des rôles/utilisateurs, retro-conversion i18n complète du reste de l'UI POS.
+- ✅ **`apps/web` (back-office) — fonctionnel** : écrans pour tous les modules ci-dessus (dashboard temps réel avec notifications, comptabilité, paie, RH, CRM, stock, achats, livraisons + carte de suivi GPS, trésorerie, crédit, actifs, GED, administration).
+- ⏳ **À construire** : écrans d'administration fine des rôles/permissions (au-delà de la gestion des utilisateurs déjà présente), retro-conversion i18n complète du reste de l'UI POS.
 
 ### Limites connues (à lever avant prod)
 - Tokens stockés en `localStorage` côté PWA (XSS-sensible) — une vraie prod devrait passer par un cookie `httpOnly` posé par l'API, ce qui suppose un même domaine ou un proxy.
