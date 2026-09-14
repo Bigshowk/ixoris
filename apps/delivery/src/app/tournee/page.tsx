@@ -18,10 +18,21 @@ export default function TourneePage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mfaGate, setMfaGate] = useState(false);
 
   useEffect(() => {
     setSession(getSession());
   }, []);
+
+  // MFA setup itself only lives in apps/web — a device whose account is required to have
+  // MFA but hasn't set it up yet is blocked here rather than left able to keep using the app.
+  useEffect(() => {
+    if (!session) return;
+    authApi
+      .me()
+      .then((me) => setMfaGate(Boolean(me.user.mfaRequired) && !me.user.mfaEnabled))
+      .catch(() => {});
+  }, [session]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -58,6 +69,17 @@ export default function TourneePage() {
 
   if (!session) {
     return <LoginScreen onReady={() => setSession(getSession())} />;
+  }
+
+  if (mfaGate) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
+        <div className="w-full max-w-sm space-y-2 rounded-xl bg-white p-6 text-center shadow-xl dark:bg-slate-900">
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{t("auth.mfa.title")}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t("profile.mfaSection.gateMessage")}</p>
+        </div>
+      </div>
+    );
   }
 
   const selected = deliveries.find((d) => d.id === selectedId) ?? null;

@@ -9,7 +9,11 @@ export interface AuthUser {
   companyId: string | null;
   locale?: string | null;
   themePreference?: string | null;
+  mfaEnabled?: boolean;
+  mfaRequired?: boolean;
 }
+
+export type LoginResult = { mfaRequired: true; mfaToken: string } | { mfaRequired: false; user: AuthUser };
 
 export interface StoreSummary {
   id: string;
@@ -36,10 +40,23 @@ async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T>
 }
 
 export const authApi = {
-  async login(email: string, password: string): Promise<AuthUser> {
-    const result = await authFetch<{ accessToken: string; refreshToken: string; user: AuthUser }>("/auth/login", {
+  async login(email: string, password: string): Promise<LoginResult> {
+    const result = await authFetch<
+      { mfaRequired: true; mfaToken: string } | { mfaRequired: false; accessToken: string; refreshToken: string; user: AuthUser }
+    >("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
+    });
+    if (result.mfaRequired) return result;
+    saveTokens(result.accessToken, result.refreshToken);
+    return { mfaRequired: false, user: result.user };
+  },
+
+  /** Second step of login when the account has MFA enabled — exchanges the challenge for real tokens. */
+  async verifyMfa(mfaToken: string, code: string): Promise<AuthUser> {
+    const result = await authFetch<{ accessToken: string; refreshToken: string; user: AuthUser }>("/auth/mfa/verify", {
+      method: "POST",
+      body: JSON.stringify({ mfaToken, code }),
     });
     saveTokens(result.accessToken, result.refreshToken);
     return result.user;
@@ -82,6 +99,38 @@ export const authApi = {
       method: "PATCH",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: JSON.stringify(prefs),
+    });
+  },
+
+  changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    const token = getAccessToken();
+    return authFetch("/auth/password", {
+      method: "PATCH",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  },
+
+  setupMfa(): Promise<{ secret: string; otpauthUrl: string }> {
+    const token = getAccessToken();
+    return authFetch("/auth/mfa/setup", { method: "POST", headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  },
+
+  enableMfa(code: string): Promise<{ backupCodes: string[] }> {
+    const token = getAccessToken();
+    return authFetch("/auth/mfa/enable", {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: JSON.stringify({ code }),
+    });
+  },
+
+  disableMfa(password: string, code: string): Promise<void> {
+    const token = getAccessToken();
+    return authFetch("/auth/mfa/disable", {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: JSON.stringify({ password, code }),
     });
   },
 };

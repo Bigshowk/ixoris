@@ -3,6 +3,7 @@ import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
+import { ChangePasswordDto, DisableMfaDto, EnableMfaDto, VerifyMfaDto } from "./dto/mfa.dto";
 import { Public } from "./decorators/public.decorator";
 import { CurrentAuth } from "../../common/current-auth.decorator";
 import { AuthContext } from "../../common/auth-context";
@@ -39,5 +40,34 @@ export class AuthController {
   @Patch("preferences")
   updatePreferences(@Body() dto: UpdatePreferencesDto, @CurrentAuth() auth: AuthContext) {
     return this.auth.updatePreferences(auth.userId, dto);
+  }
+
+  @Patch("password")
+  changePassword(@Body() dto: ChangePasswordDto, @CurrentAuth() auth: AuthContext) {
+    return this.auth.changePassword(auth.userId, dto.currentPassword, dto.newPassword);
+  }
+
+  /** Second step of login when the account has MFA enabled — exchanges the challenge token from /auth/login for real tokens. */
+  @Public()
+  @Post("mfa/verify")
+  verifyMfa(@Body() dto: VerifyMfaDto) {
+    return this.auth.verifyMfaLogin(dto.mfaToken, dto.code);
+  }
+
+  /** Starts (or restarts) MFA enrollment for the signed-in user — returns a secret to scan, not yet active. */
+  @Post("mfa/setup")
+  setupMfa(@CurrentAuth() auth: AuthContext) {
+    return this.auth.setupMfa(auth.userId);
+  }
+
+  /** Confirms enrollment with a code from the authenticator app — flips mfaEnabled and returns one-time backup codes. */
+  @Post("mfa/enable")
+  enableMfa(@Body() dto: EnableMfaDto, @CurrentAuth() auth: AuthContext) {
+    return this.auth.enableMfa(auth.userId, dto.code);
+  }
+
+  @Post("mfa/disable")
+  disableMfa(@Body() dto: DisableMfaDto, @CurrentAuth() auth: AuthContext) {
+    return this.auth.disableMfa(auth.userId, dto.password, dto.code);
   }
 }

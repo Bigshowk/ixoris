@@ -149,6 +149,15 @@ model User {
   avatarUrl       String?
   isActive        Boolean   @default(true)
   lastLoginAt     DateTime?
+
+  // MFA (TOTP) — mfaSecret is only trusted once mfaEnabled is true (an
+  // unconfirmed setup attempt leaves a secret sitting unused). Backup codes
+  // are stored hashed, same pattern as RefreshToken.tokenHash below.
+  mfaEnabled          Boolean  @default(false)
+  mfaRequired         Boolean  @default(false)
+  mfaSecret           String?
+  mfaBackupCodeHashes String[] @default([])
+
   locale          String?   @default("fr") // "fr" | "en"
   themePreference String?   @default("system") // "light" | "dark" | "system"
   createdAt       DateTime  @default(now())

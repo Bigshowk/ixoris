@@ -30,6 +30,16 @@ export class UsersController {
     return this.users.setActive(auth.companyId, id, false);
   }
 
+  @Post(":id/require-mfa")
+  requireMfa(@Param("id") id: string, @CurrentAuth() auth: AuthContext) {
+    return this.users.setMfaRequired(auth.companyId, id, true);
+  }
+
+  @Post(":id/unrequire-mfa")
+  unrequireMfa(@Param("id") id: string, @CurrentAuth() auth: AuthContext) {
+    return this.users.setMfaRequired(auth.companyId, id, false);
+  }
+
   @Post(":id/roles")
   assignRole(@Param("id") id: string, @Body() dto: AssignRoleDto, @CurrentAuth() auth: AuthContext) {
     return this.users.assignRole(auth.companyId, id, dto);

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { PasswordInput } from "@ixoris/ui";
 import { apiFetch, ApiError } from "../../../lib/api";
 import { useI18n } from "../../../lib/i18n-context";
 import { formatDate } from "../../../lib/format";
@@ -33,6 +34,8 @@ interface AdminUser {
   phone: string | null;
   isActive: boolean;
   lastLoginAt: string | null;
+  mfaEnabled: boolean;
+  mfaRequired: boolean;
   roles: UserRoleAssignment[];
 }
 
@@ -108,6 +111,16 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function handleToggleMfaRequired(user: AdminUser) {
+    setActionError(null);
+    try {
+      await apiFetch(`/admin/users/${user.id}/${user.mfaRequired ? "unrequire-mfa" : "require-mfa"}`, { method: "POST" });
+      loadUsers();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : t("errors.networkError"));
+    }
+  }
+
   function updateAssignDraft(userId: string, patch: Partial<AssignDraft>) {
     setAssignDrafts((prev) => ({ ...prev, [userId]: { ...(prev[userId] ?? { roleId: "", storeId: "" }), ...patch } }));
   }
@@ -160,12 +173,13 @@ export default function AdminUsersPage() {
             onChange={(e) => setEmail(e.target.value)}
             className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
           />
-          <input
-            type="password"
-            placeholder={t("admin.users.password")}
+          <PasswordInput
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="rounded-md border border-slate-200 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            onChange={setPassword}
+            placeholder={t("admin.users.password")}
+            autoComplete="new-password"
+            inputClassName="rounded-md border border-slate-200 bg-white px-2 py-1.5 pr-9 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+            labels={{ show: t("auth.passwordField.show"), hide: t("auth.passwordField.hide") }}
           />
           <input
             type="text"
@@ -249,6 +263,22 @@ export default function AdminUsersPage() {
                         className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                       >
                         {u.isActive ? t("admin.users.deactivate") : t("admin.users.activate")}
+                      </button>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                          u.mfaEnabled
+                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                            : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500"
+                        }`}
+                      >
+                        {u.mfaEnabled ? t("admin.users.mfaEnabled") : t("admin.users.mfaDisabled")}
+                        {u.mfaRequired ? ` · ${t("admin.users.mfaRequired")}` : ""}
+                      </span>
+                      <button
+                        onClick={() => handleToggleMfaRequired(u)}
+                        className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      >
+                        {u.mfaRequired ? t("admin.users.unrequireMfa") : t("admin.users.requireMfa")}
                       </button>
                     </div>
                   </div>

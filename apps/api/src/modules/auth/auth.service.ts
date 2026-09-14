@@ -1,11 +1,20 @@
-import { Inject, Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Inject, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { randomBytes, createHash } from "crypto";
 import bcrypt from "bcryptjs";
 import { PrismaService } from "../../prisma/prisma.service";
 import { User } from "@ixoris/database";
+import { MfaChallengePayload } from "./auth.types";
+import {
+  buildOtpauthUrl,
+  generateBackupCodes,
+  generateTotpSecret,
+  hashBackupCode,
+  verifyTotp,
+} from "./mfa/totp.util";
 
 const REFRESH_TOKEN_DAYS = parseDays(process.env.REFRESH_TOKEN_EXPIRES_IN, 30);
+const MFA_CHALLENGE_EXPIRES_IN = "5m";
 
 @Injectable()
 export class AuthService {
@@ -20,6 +29,36 @@ export class AuthService {
       throw new UnauthorizedException("Invalid email or password");
     }
 
+    if (user.mfaEnabled) {
+      // Password is correct, but the caller doesn't get real tokens yet — just a short-lived
+      // challenge scoped to /auth/mfa/verify, exchanged for real tokens once the code checks out.
+      return { mfaRequired: true as const, mfaToken: await this.signMfaChallengeToken(user.id) };
+    }
+
+    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+
+    return {
+      mfaRequired: false as const,
+      accessToken: await this.signAccessToken(user),
+      refreshToken: await this.issueRefreshToken(user.id),
+      user: this.toPublicUser(user),
+    };
+  }
+
+  async verifyMfaLogin(mfaToken: string, code: string) {
+    let payload: MfaChallengePayload;
+    try {
+      payload = await this.jwt.verifyAsync<MfaChallengePayload>(mfaToken);
+    } catch {
+      throw new UnauthorizedException("Invalid or expired MFA challenge");
+    }
+    if (!payload.mfaPending) throw new UnauthorizedException("Invalid or expired MFA challenge");
+
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: payload.sub } });
+    if (!user.isActive) throw new UnauthorizedException("Account disabled");
+    if (!user.mfaEnabled || !user.mfaSecret) throw new UnauthorizedException("MFA is not enabled on this account");
+
+    await this.consumeMfaCode(user.id, user.mfaSecret, user.mfaBackupCodeHashes, code);
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
     return {
@@ -27,6 +66,72 @@ export class AuthService {
       refreshToken: await this.issueRefreshToken(user.id),
       user: this.toPublicUser(user),
     };
+  }
+
+  /** Generates a fresh secret (not yet trusted — `mfaEnabled` stays false until `enableMfa` confirms a code). */
+  async setupMfa(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const secret = generateTotpSecret();
+    await this.prisma.user.update({ where: { id: userId }, data: { mfaSecret: secret } });
+    return { secret, otpauthUrl: buildOtpauthUrl(secret, user.email) };
+  }
+
+  async enableMfa(userId: string, code: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!user.mfaSecret) throw new BadRequestException("Call /auth/mfa/setup first");
+    if (!verifyTotp(user.mfaSecret, code)) throw new UnauthorizedException("Invalid or expired code");
+
+    const backupCodes = generateBackupCodes();
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { mfaEnabled: true, mfaBackupCodeHashes: backupCodes.map(hashBackupCode) },
+    });
+    // Plaintext codes are never stored — this is the only time the caller can see them.
+    return { backupCodes };
+  }
+
+  async disableMfa(userId: string, password: string, code: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!bcrypt.compareSync(password, user.passwordHash)) throw new UnauthorizedException("Invalid password");
+    if (!user.mfaSecret) throw new BadRequestException("MFA is not enabled");
+    await this.consumeMfaCode(userId, user.mfaSecret, user.mfaBackupCodeHashes, code);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { mfaEnabled: false, mfaSecret: null, mfaBackupCodeHashes: [] },
+    });
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (!bcrypt.compareSync(currentPassword, user.passwordHash)) {
+      throw new UnauthorizedException("Invalid current password");
+    }
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: bcrypt.hashSync(newPassword, 10) },
+    });
+  }
+
+  /** Verifies a TOTP code, falling back to a single-use backup code (its hash is removed once consumed). */
+  private async consumeMfaCode(userId: string, secret: string, backupCodeHashes: string[], code: string) {
+    if (verifyTotp(secret, code)) return;
+
+    const hash = hashBackupCode(code);
+    if (backupCodeHashes.includes(hash)) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { mfaBackupCodeHashes: backupCodeHashes.filter((h) => h !== hash) },
+      });
+      return;
+    }
+
+    throw new UnauthorizedException("Invalid or expired code");
+  }
+
+  private async signMfaChallengeToken(userId: string): Promise<string> {
+    const payload: MfaChallengePayload = { sub: userId, mfaPending: true };
+    return this.jwt.signAsync(payload, { expiresIn: MFA_CHALLENGE_EXPIRES_IN });
   }
 
   async refresh(rawToken: string) {
@@ -101,6 +206,8 @@ export class AuthService {
       companyId: user.companyId,
       locale: user.locale,
       themePreference: user.themePreference,
+      mfaEnabled: user.mfaEnabled,
+      mfaRequired: user.mfaRequired,
     };
   }
 }

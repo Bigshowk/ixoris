@@ -9,7 +9,11 @@ export interface AuthUser {
   companyId: string | null;
   locale?: string | null;
   themePreference?: string | null;
+  mfaEnabled?: boolean;
+  mfaRequired?: boolean;
 }
+
+export type LoginResult = { mfaRequired: true; mfaToken: string } | { mfaRequired: false; user: AuthUser };
 
 export interface StoreSummary {
   id: string;
@@ -36,10 +40,23 @@ async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T>
 }
 
 export const authApi = {
-  async login(email: string, password: string): Promise<AuthUser> {
-    const result = await authFetch<{ accessToken: string; refreshToken: string; user: AuthUser }>("/auth/login", {
+  async login(email: string, password: string): Promise<LoginResult> {
+    const result = await authFetch<
+      { mfaRequired: true; mfaToken: string } | { mfaRequired: false; accessToken: string; refreshToken: string; user: AuthUser }
+    >("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
+    });
+    if (result.mfaRequired) return result;
+    saveTokens(result.accessToken, result.refreshToken);
+    return { mfaRequired: false, user: result.user };
+  },
+
+  /** Second step of login when the account has MFA enabled — exchanges the challenge for real tokens. */
+  async verifyMfa(mfaToken: string, code: string): Promise<AuthUser> {
+    const result = await authFetch<{ accessToken: string; refreshToken: string; user: AuthUser }>("/auth/mfa/verify", {
+      method: "POST",
+      body: JSON.stringify({ mfaToken, code }),
     });
     saveTokens(result.accessToken, result.refreshToken);
     return result.user;

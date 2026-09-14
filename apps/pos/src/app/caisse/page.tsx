@@ -35,6 +35,7 @@ export default function CaissePage() {
   const [printerHost, setPrinterHost] = useState("");
   const [activeCarts, setActiveCarts] = useState<CartDTO[]>([]);
   const [cartsDrawerOpen, setCartsDrawerOpen] = useState(false);
+  const [mfaGate, setMfaGate] = useState(false);
 
   const cartRef = useRef<CartDTO | null>(null);
   cartRef.current = cart;
@@ -42,6 +43,16 @@ export default function CaissePage() {
   useEffect(() => {
     setSession(getSession());
   }, []);
+
+  // MFA setup itself only lives in apps/web — a device whose account is required to have
+  // MFA but hasn't set it up yet is blocked here rather than left able to keep using the till.
+  useEffect(() => {
+    if (!session) return;
+    authApi
+      .me()
+      .then((me) => setMfaGate(Boolean(me.user.mfaRequired) && !me.user.mfaEnabled))
+      .catch(() => {});
+  }, [session]);
 
   const reconcileCart = useCallback(async () => {
     if (cartRef.current) {
@@ -249,6 +260,17 @@ export default function CaissePage() {
 
   if (!session) {
     return <LoginScreen onReady={() => setSession(getSession())} />;
+  }
+
+  if (mfaGate) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
+        <div className="w-full max-w-sm space-y-2 rounded-xl bg-white p-6 text-center shadow-xl dark:bg-slate-900">
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{t("auth.mfa.title")}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t("profile.mfaSection.gateMessage")}</p>
+        </div>
+      </div>
+    );
   }
 
   return (

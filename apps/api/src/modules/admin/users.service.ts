@@ -11,6 +11,8 @@ const userSelect = {
   phone: true,
   isActive: true,
   lastLoginAt: true,
+  mfaEnabled: true,
+  mfaRequired: true,
   roles: { include: { role: true, store: true } },
 } as const;
 
@@ -46,6 +48,11 @@ export class UsersService {
   async setActive(companyId: string, id: string, isActive: boolean) {
     await this.findOne(companyId, id);
     return this.prisma.user.update({ where: { id }, data: { isActive }, select: userSelect });
+  }
+
+  async setMfaRequired(companyId: string, id: string, mfaRequired: boolean) {
+    await this.findOne(companyId, id);
+    return this.prisma.user.update({ where: { id }, data: { mfaRequired }, select: userSelect });
   }
 
   async assignRole(companyId: string, userId: string, dto: AssignRoleDto) {

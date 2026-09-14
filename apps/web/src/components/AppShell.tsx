@@ -28,6 +28,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/actifs", labelKey: "nav.assets", icon: "🏭" },
   { href: "/documents", labelKey: "nav.documents", icon: "📎" },
   { href: "/admin", labelKey: "nav.admin", icon: "⚙️" },
+  { href: "/profil", labelKey: "nav.profile", icon: "👤" },
 ];
 
 export interface AppShellProps {
@@ -39,6 +40,25 @@ export interface AppShellProps {
 export function AppShell({ user, onLogout, children }: AppShellProps) {
   const { t } = useI18n();
   const pathname = usePathname();
+
+  // Admin has required MFA on this account but it isn't set up yet — force the setup screen
+  // before anything else. The /profil route itself is exempt, so the user can actually reach it.
+  if (user.mfaRequired && !user.mfaEnabled && pathname !== "/profil") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 dark:bg-slate-950">
+        <div className="w-full max-w-sm space-y-4 rounded-xl bg-white p-6 text-center shadow-xl dark:bg-slate-900">
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{t("profile.mfaSection.title")}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t("profile.mfaSection.gateMessage")}</p>
+          <Link
+            href="/profil"
+            className="inline-block w-full rounded-lg bg-indigo-600 py-2 font-medium text-white hover:bg-indigo-500"
+          >
+            {t("profile.mfaSection.enable")}
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">

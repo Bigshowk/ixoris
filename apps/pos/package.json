@@ -12,6 +12,7 @@
     "@ixoris/i18n": "workspace:*",
     "@ixoris/sync-client": "workspace:*",
     "@ixoris/types": "workspace:*",
+    "@ixoris/ui": "workspace:*",
     "@zxing/browser": "^0.1.5",
     "@zxing/library": "^0.21.3",
     "next": "^14.2.0",
