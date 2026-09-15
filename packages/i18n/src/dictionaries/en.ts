@@ -812,6 +812,13 @@ const en = {
   },
   help: {
     title: "Help center",
+    assistantTitle: "Local AI assistant",
+    assistantOfflineBadge: "100% offline",
+    assistantDescription: "Ask a question in plain language — answered locally from this guide, no data ever leaves your server.",
+    assistantPlaceholder: "e.g. How do I close a cash session?",
+    assistantAsk: "Ask",
+    assistantThinking: "Searching…",
+    assistantNoAnswer: "No confident match found in the documentation for this question — try rephrasing it, or browse the guides below.",
     searchPlaceholder: "Search a guide, a topic, an error code…",
     noResults: "No results for this search.",
     domainAll: "All",

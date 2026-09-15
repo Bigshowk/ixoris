@@ -15,6 +15,7 @@ import {
 
 const REFRESH_TOKEN_DAYS = parseDays(process.env.REFRESH_TOKEN_EXPIRES_IN, 30);
 const MFA_CHALLENGE_EXPIRES_IN = "5m";
+const BCRYPT_COST = 12;
 
 @Injectable()
 export class AuthService {
@@ -109,8 +110,11 @@ export class AuthService {
     }
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash: bcrypt.hashSync(newPassword, 10) },
+      data: { passwordHash: bcrypt.hashSync(newPassword, BCRYPT_COST) },
     });
+    // Changing the password is a security-sensitive action — revoke every other active
+    // session so a refresh token stolen before the change stops working immediately.
+    await this.prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
   }
 
   /** Verifies a TOTP code, falling back to a single-use backup code (its hash is removed once consumed). */
@@ -136,7 +140,16 @@ export class AuthService {
 
   async refresh(rawToken: string) {
     const record = await this.prisma.refreshToken.findUnique({ where: { tokenHash: hashToken(rawToken) } });
-    if (!record || record.revokedAt || record.expiresAt < new Date()) {
+    if (!record) throw new UnauthorizedException("Invalid or expired refresh token");
+
+    if (record.revokedAt) {
+      // Reuse of an already-rotated token is the classic signal that it was stolen (the thief and
+      // the legitimate user are now racing on the same token). Revoke every other active refresh
+      // token for this user so both are forced to re-authenticate, rather than failing silently.
+      await this.prisma.refreshToken.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: new Date() } });
+      throw new UnauthorizedException("Invalid or expired refresh token");
+    }
+    if (record.expiresAt < new Date()) {
       throw new UnauthorizedException("Invalid or expired refresh token");
     }
 

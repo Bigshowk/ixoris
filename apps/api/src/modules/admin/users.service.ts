@@ -30,7 +30,7 @@ export class UsersService {
       data: {
         companyId,
         email: dto.email,
-        passwordHash: bcrypt.hashSync(dto.password, 10),
+        passwordHash: bcrypt.hashSync(dto.password, 12),
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
@@ -46,13 +46,18 @@ export class UsersService {
   }
 
   async setActive(companyId: string, id: string, isActive: boolean) {
-    await this.findOne(companyId, id);
-    return this.prisma.user.update({ where: { id }, data: { isActive }, select: userSelect });
+    // updateMany's `where` enforces companyId at the query level (unlike `update`, which only
+    // accepts unique fields in `where`) — a stray future call site can't silently drop the
+    // tenant check the way it could if this relied solely on a preceding findOne().
+    const result = await this.prisma.user.updateMany({ where: { id, companyId }, data: { isActive } });
+    if (result.count === 0) throw new NotFoundException(`User ${id} not found`);
+    return this.prisma.user.findUniqueOrThrow({ where: { id }, select: userSelect });
   }
 
   async setMfaRequired(companyId: string, id: string, mfaRequired: boolean) {
-    await this.findOne(companyId, id);
-    return this.prisma.user.update({ where: { id }, data: { mfaRequired }, select: userSelect });
+    const result = await this.prisma.user.updateMany({ where: { id, companyId }, data: { mfaRequired } });
+    if (result.count === 0) throw new NotFoundException(`User ${id} not found`);
+    return this.prisma.user.findUniqueOrThrow({ where: { id }, select: userSelect });
   }
 
   async assignRole(companyId: string, userId: string, dto: AssignRoleDto) {

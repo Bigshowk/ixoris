@@ -20,14 +20,15 @@ Ressources commerciales prêtes à l'emploi pour la prospection et le lancement 
 
 **[1:00 – La solution, 60 secondes]**
 
-> "IXORIS, c'est un logiciel de gestion tout-en-un, pensé pour les commerces d'ici. Trois choses à retenir :
+> "IXORIS, c'est un logiciel de gestion tout-en-un, pensé pour les commerces d'ici. Quatre choses à retenir :
 > 1. **Une seule caisse pour toute l'équipe** — chaque vente scannée met à jour le stock en temps réel, sur tous vos postes en même temps, même sur plusieurs boutiques.
 > 2. **Une comptabilité qui se fait toute seule** — chaque vente, chaque facture, chaque paie génère automatiquement son écriture, selon les normes SYSCOHADA. Votre comptable gagne des jours chaque mois.
-> 3. **Ça marche même sans internet** — une coupure réseau n'arrête jamais la caisse, tout se resynchronise automatiquement dès que la connexion revient."
+> 3. **Ça marche même sans internet** — une coupure réseau n'arrête jamais la caisse, tout se resynchronise automatiquement dès que la connexion revient.
+> 4. **Un assistant intelligent intégré, 100% local** — il répond aux questions de vos équipes et repère les mouvements de stock suspects, sans jamais envoyer la moindre donnée sur internet. Même votre IA fonctionne hors-ligne."
 
 **[2:00 – La preuve / différenciation, 40 secondes]**
 
-> "Et sur la sécurité : on a mis en place une double authentification comme dans une banque, pour protéger les accès de vos employés. Chaque mouvement de stock, chaque encaissement, chaque bulletin de paie est tracé et comptabilisé automatiquement. Vous, en tant que patron, vous recevez une vue d'ensemble en temps réel — clients en retard de paiement, stock qui s'épuise, approbations en attente — le tout sur un seul tableau de bord, même depuis votre téléphone."
+> "Et sur la sécurité : on a mis en place une double authentification comme dans une banque, pour protéger les accès de vos employés. Chaque mouvement de stock, chaque encaissement, chaque bulletin de paie est tracé et comptabilisé automatiquement. Vous, en tant que patron, vous recevez une vue d'ensemble en temps réel — clients en retard de paiement, stock qui s'épuise, approbations en attente — le tout sur un seul tableau de bord, même depuis votre téléphone. Et si un employé a une question sur le logiciel à 22h, l'assistant IA intégré lui répond directement — sans appeler personne, sans connexion internet requise, et sans qu'aucune donnée de votre commerce ne quitte jamais vos serveurs."
 
 **[2:40 – Appel à l'action, 20 secondes]**
 
@@ -42,10 +43,11 @@ Ressources commerciales prêtes à l'emploi pour la prospection et le lancement 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                     IXORIS ERP                            │
-│   La gestion complète de votre commerce, enfin réunie.    │
+│  La gestion complète de votre commerce, augmentée par     │
+│         une IA 100% locale et confidentielle.              │
 └─────────────────────────────────────────────────────────┘
 
-LES 6 AVANTAGES CONCURRENTIELS D'IXORIS
+LES 7 AVANTAGES CONCURRENTIELS D'IXORIS
 
 1. 🔄 CAISSE MULTI-POSTE EN TEMPS RÉEL
    Plusieurs caissiers, un seul stock. Un panier commencé sur
@@ -77,6 +79,13 @@ LES 6 AVANTAGES CONCURRENTIELS D'IXORIS
    client, Actifs — tout est connecté, rien n'est ressaisi
    deux fois.
 
+7. 🤖 ASSISTANT IA 100% LOCAL ET CONFIDENTIEL
+   Vos équipes posent leurs questions en langage naturel et
+   sont dépannées instantanément ; les anomalies de stock sont
+   détectées automatiquement. Aucune connexion internet requise,
+   aucune donnée envoyée à l'extérieur — l'IA tourne entièrement
+   sur vos propres serveurs.
+
 ─────────────────────────────────────────────────────────
 
   "Arrêtez de gérer votre commerce avec un cahier et un
@@ -93,10 +102,11 @@ LES 6 AVANTAGES CONCURRENTIELS D'IXORIS
 
 > **Hook** : Votre stock disparaît sans que vous sachiez pourquoi ? 👀
 >
-> **Corps** : IXORIS ERP connecte votre caisse, votre stock et votre comptabilité en un seul système — même sans connexion internet stable. Fini les écarts de caisse inexpliqués, fini la ressaisie manuelle pour le comptable en fin de mois.
+> **Corps** : IXORIS ERP connecte votre caisse, votre stock et votre comptabilité en un seul système — même sans connexion internet stable, et avec un assistant IA intégré qui répond à vos équipes sans jamais envoyer vos données sur internet. Fini les écarts de caisse inexpliqués, fini la ressaisie manuelle pour le comptable en fin de mois.
 > ✅ Caisse multi-poste en temps réel
 > ✅ Comptabilité SYSCOHADA automatique
 > ✅ Fonctionne même hors-ligne
+> ✅ IA 100% locale et confidentielle
 >
 > **Appel à l'action** : 📩 Démo gratuite de 20 min dans votre boutique — écrivez-nous "DÉMO" en commentaire ou par message.
 
@@ -106,7 +116,7 @@ LES 6 AVANTAGES CONCURRENTIELS D'IXORIS
 >
 > **Corps** : IXORIS ERP est une plateforme de gestion intégrée conçue pour les PME et commerces d'Afrique de l'Ouest : point de vente, stock, achats, RH/paie, CRM et comptabilité SYSCOHADA dans un seul système, avec authentification à deux facteurs et traçabilité complète de chaque transaction.
 >
-> Chaque vente se comptabilise automatiquement. Chaque livraison est suivie en temps réel. Chaque poste de caisse reste opérationnel même en cas de coupure réseau.
+> Chaque vente se comptabilise automatiquement. Chaque livraison est suivie en temps réel. Chaque poste de caisse reste opérationnel même en cas de coupure réseau. Et parce que la confidentialité de vos données est non négociable, l'assistant IA intégré fonctionne entièrement sur vos propres serveurs — sans connexion internet, sans envoi de données à un tiers.
 >
 > **Appel à l'action** : Planifiez une démonstration avec notre équipe → [lien de prise de rendez-vous]
 
@@ -114,7 +124,7 @@ LES 6 AVANTAGES CONCURRENTIELS D'IXORIS
 
 > 🏪 *Vous gérez votre boutique sur cahier ou Excel ?*
 >
-> IXORIS ERP fait tout en un : caisse, stock, compta, paie — et ça marche même sans internet stable.
+> IXORIS ERP fait tout en un : caisse, stock, compta, paie — et ça marche même sans internet stable, avec un assistant IA intégré qui garde toutes vos données chez vous.
 >
 > 📲 Je vous montre en 20 min comment ça peut changer votre quotidien. On se cale un créneau cette semaine ?
 >
@@ -129,7 +139,7 @@ LES 6 AVANTAGES CONCURRENTIELS D'IXORIS
 | 0:09–0:14 | Split-écran : deux postes de caisse différents, même panier visible sur les deux | *"Le stock se met à jour partout, instantanément — même sur plusieurs caisses."* — Texte : **"Multi-poste, zéro erreur"** |
 | 0:14–0:19 | Coupure simulée d'internet (icône Wi-Fi barrée) puis la caisse continue de fonctionner normalement | *"Une coupure internet ? La caisse continue de tourner."* — Texte : **"100% hors-ligne compatible"** |
 | 0:19–0:24 | Smartphone du patron : notification "Nouvelle vente — 45 000 FCFA" + tableau de bord avec graphiques | *"Le patron, lui, voit tout, en direct, depuis son téléphone."* — Texte : **"Pilotage en temps réel"** |
-| 0:24–0:30 | Logo IXORIS ERP + coordonnées de contact sur fond neutre | *"IXORIS ERP. La gestion de votre commerce, enfin simple."* — Texte : **"Démo gratuite → [contact]"** |
+| 0:24–0:30 | Logo IXORIS ERP + coordonnées de contact sur fond neutre | *"IXORIS ERP. La gestion de votre commerce, augmentée par une IA 100% locale."* — Texte : **"Démo gratuite → [contact]"** |
 
 ---
 

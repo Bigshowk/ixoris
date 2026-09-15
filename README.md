@@ -40,6 +40,7 @@ PROJET-IXORIS/
 │   ├── accounting-engine/          # Moteur SYSCOHADA : écritures, Bilan, Compte de résultat, SIG, rapprochement bancaire
 │   ├── payroll-engine/               # Calcul de paie, cotisations, génération bulletin
 │   ├── escpos/                        # Formatage tickets/bulletins pour imprimantes thermiques
+│   ├── local-ai/                       # Agent IA local (RAG hors-ligne, anomalies stock, suggestions comptables)
 │   ├── sync-client/                    # File offline IndexedDB + client WebSocket (hooks)
 │   ├── rbac/                            # Catalogue de permissions + rôles prédéfinis (dont Livreur)
 │   ├── i18n/                              # Dictionnaires FR/EN partagés (frontend + messages backend)
@@ -72,6 +73,31 @@ PROJET-IXORIS/
 | K. Contrôle du crédit & Recouvrement | module `credit-control`, tables `PaymentInstallment`, `Customer.isBlocked` |
 | L. Actifs & Amortissements (classe 2 OHADA) | module `fixed-assets`, tables `FixedAsset/DepreciationEntry` |
 | M. GED & Workflows d'approbation | module `documents`, tables `Document/ApprovalRule/ApprovalRequest` |
+| N. Sécurité — Auth/MFA, rate-limiting, WebSocket authentifié | `apps/api/src/modules/auth`, `modules/realtime/pos.gateway.ts` — voir [Sécurité & durcissement](#sécurité--durcissement) |
+| O. Agent IA Local (Offline AI) | `packages/local-ai`, module `apps/api/src/modules/local-ai`, onglet `apps/web/aide` — voir [Agent IA Local](#agent-ia-local-offline-ai) |
+
+## Sécurité & durcissement
+
+Un audit d'architecture et de sécurité complet (authentification/RBAC, synchronisation hors-ligne, injection/XSS) a été mené sur l'ensemble du monorepo. Le détail complet — méthodologie, constats fichier:ligne, correctifs appliqués et recommandations restantes — est consigné dans **[RAPPORT_SECURITE_ET_REMEDS.md](RAPPORT_SECURITE_ET_REMEDS.md)**. Correctifs notables déjà appliqués :
+
+- **Authentification** : l'API refuse de démarrer sans un vrai `JWT_SECRET` (fin du secret par défaut codé en dur) ; limitation de débit (anti brute-force) sur `/auth/login` et `/auth/mfa/verify` ; détection de réutilisation de refresh token avec révocation de session en cascade ; révocation des sessions actives au changement de mot de passe.
+- **Canal temps réel POS** : le namespace WebSocket `/pos` exige désormais le même jeton d'accès que l'API REST, avec vérification que le magasin rejoint appartient bien à la société de l'appelant (isolation multi-tenant).
+- **Caisse (POS)** : nouvelle permission dédiée `pos.price.override` (non accordée au Caissier par défaut) pour toute modification manuelle de prix ; toute remise est plafonnée serveur au total de la ligne ; correction d'un accès possible à un article d'un autre panier.
+- **Livraison** : un livreur ne peut plus consulter ni modifier une livraison qui ne lui est pas assignée (sauf détenteur de `logistics.delivery.manage`).
+- **Validation des entrées** : `ValidationPipe` rejette désormais (plutôt que de silencieusement ignorer) tout champ non attendu dans une requête ; limite de taille de corps de requête explicite.
+- **Assainissement (SQL/XSS)** : audit exhaustif — aucune requête SQL brute non paramétrée, aucun contournement de l'échappement HTML par défaut de React identifié dans le code actuel.
+
+## Agent IA Local (Offline AI)
+
+`packages/local-ai` (framework-agnostic, zéro dépendance externe) + module `apps/api/src/modules/local-ai` exposent un assistant IA qui fonctionne **entièrement à l'intérieur du processus API** — aucun appel réseau sortant, aucune clé API, aucune donnée envoyée à un service tiers.
+
+> **Précision honnête sur l'architecture** : cet environnement de développement n'a pas d'accès réseau pour télécharger des poids de modèle (LLM quantifié type GGUF/ONNX). Plutôt que de simuler une IA générative, l'agent est construit comme un **moteur de recherche local + un système à base de règles explicables** — une architecture réellement fonctionnelle et vérifiable, avec un point d'extension clair pour brancher un vrai moteur d'inférence local (`node-llama-cpp`, ONNX Runtime...) une fois le déploiement cible capable de fournir les poids du modèle. Voir `packages/local-ai/src/retrieval.ts` pour le raisonnement détaillé.
+
+Trois capacités, toutes accessibles via l'API (`POST /local-ai/ask`, `GET /local-ai/stock/anomalies`, `POST /local-ai/accounting/suggest-entry`) :
+
+1. **Super-Assistant Support (RAG local)** — `packages/local-ai/src/retrieval.ts` : recherche lexicale TF-IDF sur une base de connaissance hors-ligne (synthétisée depuis `GUIDE_UTILISATEUR_COMPLET.md`), avec repli accent-insensible et normalisation française. Répond de façon extractive (renvoie le passage le plus pertinent, avec un score de confiance) plutôt que de générer un texte libre. Intégré directement dans l'onglet **Aide** (`apps/web/aide`) sous forme d'un champ de question en langage naturel.
+2. **Détection d'anomalies de stock** — `packages/local-ai/src/anomaly-detection.ts` : statistiques déterministes et explicables sur les mouvements de stock récents (stock négatif, écart-type/z-score par rapport à l'historique du produit, ajustements manuels sans référence, corrections répétées en moins de 24h) — chaque anomalie porte une justification en langage clair, pas de boîte noire.
+3. **Suggestion d'écritures comptables** — `packages/local-ai/src/accounting-suggest.ts` : suggère des comptes du plan SYSCOHADA à partir d'une description libre (mots-clés), pour accélérer la saisie manuelle — ne poste jamais d'écriture automatiquement, l'utilisateur garde toujours la décision finale.
 
 ## Schéma de base de données
 
@@ -260,6 +286,8 @@ Une fois `pnpm db:seed` exécuté, utiliser les [identifiants de démonstration]
 - ✅ **`apps/web` (back-office) — fonctionnel** : écrans pour tous les modules ci-dessus (dashboard temps réel avec notifications, comptabilité, paie, RH, CRM, stock, achats, livraisons + carte de suivi GPS, trésorerie, crédit, actifs, GED, administration).
 - ✅ **Sécurité — MFA (TOTP) & robustesse du mot de passe — fonctionnel** : [`packages/ui`](packages/ui) fournit un composant `PasswordInput` partagé (bascule affichage/masquage, jauge de robustesse à 5 niveaux avec indices de critères manquants) intégré aux écrans de connexion des 3 apps, à la création d'utilisateur (admin) et au changement de mot de passe. Le module `auth` gagne une authentification à deux facteurs TOTP (RFC 6238/4226) **implémentée nativement sur `crypto`** (aucune dépendance externe — `otplib`/`qrcode` indisponibles sans accès réseau dans cet environnement) : `POST /auth/mfa/setup|enable|disable`, connexion en 2 étapes (`POST /auth/login` renvoie un `mfaToken` transitoire si le MFA est actif, échangé contre les tokens finaux via `POST /auth/mfa/verify`), 10 codes de secours à usage unique générés à l'activation (hashés en base, jamais stockés en clair). Auto-enrôlement en libre-service via le nouvel écran `apps/web/profil` (QR code rendu côté navigateur via `qrcode` chargé en CDN au runtime — même pattern que Leaflet pour la carte logistique — avec repli "saisie manuelle" du secret) ; un administrateur peut rendre le MFA obligatoire par utilisateur (`User.mfaRequired`, bouton "Exiger le MFA" dans `apps/web/admin`), auquel cas un écran de blocage (présent sur les 3 apps) retient l'utilisateur jusqu'à configuration effective.
 - ✅ **Branding, module Aide & module À propos — fonctionnel** : logo officiel **IXORIS** (monogramme "anneau ouvert + flèche" validé avec l'éditeur), composant [`IxorisLogo`](packages/ui/src/IxorisLogo.tsx) partagé et intégré à la navigation d'`apps/web`, aux écrans de connexion d'`apps/pos`/`apps/delivery`, aux bulletins de paie PDF (`packages/payroll-engine`, dessiné en vecteur natif PDFKit — aucune image rasterisée) et aux tickets de caisse thermiques (`packages/escpos`, bitmap monochrome généré depuis la même géométrie, commande ESC/POS `GS v 0`). Nouvelle page `apps/web/a-propos` : crédits éditeur (Kader Salim / KADERSYS SOFTWARE SYSTEMS), fiche technique, et **statut des services en direct** (API + base de données via un nouvel endpoint public `GET /health` côté `apps/api`, WebSocket, moteur hors-ligne détecté côté navigateur). Nouvelle page `apps/web/aide` : centre d'aide avec recherche et filtre par domaine (Caisse, Stock, Comptabilité, RH/Paie, Logistique) sur des guides condensés à partir de [GUIDE_UTILISATEUR_COMPLET.md](GUIDE_UTILISATEUR_COMPLET.md), plus le tableau de dépannage intégré.
+- ✅ **Audit de sécurité & durcissement — fonctionnel** : voir [Sécurité & durcissement](#sécurité--durcissement) ci-dessus et [RAPPORT_SECURITE_ET_REMEDS.md](RAPPORT_SECURITE_ET_REMEDS.md) pour le détail complet (JWT à secret obligatoire, rate-limiting login/MFA, WebSocket POS authentifié, permission dédiée pour l'override de prix en caisse, isolation chauffeur sur les livraisons, révocation de session en cascade, validation stricte des entrées).
+- ✅ **Agent IA Local (Offline AI) — fonctionnel** : voir [Agent IA Local](#agent-ia-local-offline-ai) ci-dessus — [`packages/local-ai`](packages/local-ai) fournit un assistant support (RAG local extractif) intégré à l'onglet Aide, une détection d'anomalies de stock et un assistant de suggestion d'écritures comptables, le tout 100 % local sans dépendance externe.
 - ⏳ **À construire** : écrans d'administration fine des rôles/permissions (au-delà de la gestion des utilisateurs déjà présente), retro-conversion i18n complète du reste de l'UI POS.
 
 ### Limites connues (à lever avant prod)
@@ -293,6 +321,11 @@ Une fois `pnpm db:seed` exécuté, utiliser les [identifiants de démonstration]
 - Le logo IXORIS imprimé sur les tickets thermiques (`packages/escpos`) utilise la commande raster ESC/POS `GS v 0`, générée et vérifiée par simulation logicielle (aperçu bitmap) — elle n'a pas pu être testée sur une imprimante thermique physique dans cet environnement ; à valider sur le matériel cible avant une mise en production (`showLogo: false` permet de le désactiver ticket par ticket en attendant).
 - Il n'existe pas encore de génération de facture PDF dédiée (contrairement au bulletin de paie) — le module Comptabilité gère les factures comme des données consultables/imprimables depuis le navigateur, pas comme un export PDF avec en-tête et logo ; à ajouter si un PDF de facture "officiel" est requis.
 - La mention légale de la page À propos utilise volontairement la formulation "aligné sur le plan comptable SYSCOHADA Révisé" plutôt que "certifié conforme" — le moteur comptable est correct et testé (voir plus haut), mais aucune certification tierce n'a été obtenue ; à ajuster si une telle certification est un jour réalisée.
+- Le limiteur de débit sur `/auth/login`/`/auth/mfa/verify` est en mémoire de processus — protège une instance unique ; un déploiement multi-instance devrait migrer ce compteur vers Redis (même remarque que la salle WebSocket du POS).
+- `PermissionsGuard` laisse passer toute route authentifiée sans `@RequirePermissions(...)` explicite (voir [RAPPORT_SECURITE_ET_REMEDS.md](RAPPORT_SECURITE_ET_REMEDS.md) §1.9) — aucune route sensible n'en dépend aujourd'hui, mais c'est un point de vigilance pour tout nouveau contrôleur.
+- La file hors-ligne du POS n'a pas de clé d'idempotence — un rejeu concurrent (ex. deux événements `online` successifs) peut, en théorie, dupliquer un ajout d'article (voir rapport §2.2).
+- `apps/delivery` n'a pas de file hors-ligne (contrairement à `apps/pos`) — une perte de connexion pendant une mise à jour de statut ou une preuve de livraison fait échouer l'action plutôt que de la mettre en attente (voir rapport §2.3).
+- L'Agent IA Local (`packages/local-ai`) est un moteur de recherche local + un système à base de règles, pas un modèle génératif — voir la section [Agent IA Local](#agent-ia-local-offline-ai) pour le raisonnement ; le point d'extension pour un vrai LLM local quantifié est documenté dans `packages/local-ai/src/retrieval.ts`.
 
 ## Identifiants de démonstration (après `pnpm db:seed`)
 

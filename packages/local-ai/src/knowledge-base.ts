@@ -1,26 +1,26 @@
-"use client";
+export type HelpDomain = "pos" | "stock" | "accounting" | "hr" | "logistics";
 
-import { FormEvent, useMemo, useState } from "react";
-import { useI18n } from "../../../lib/i18n-context";
-import { apiFetch } from "../../../lib/api";
-
-type Domain = "pos" | "stock" | "accounting" | "hr" | "logistics";
-
-interface AskAnswer {
-  found: boolean;
-  matchedTitle: string | null;
-  answer: string | null;
-  confidence: number;
-}
-
-interface FaqItem {
+export interface FaqEntry {
   id: string;
-  domain: Domain;
+  domain: HelpDomain;
   question: string;
   answer: string;
 }
 
-const FAQ_ITEMS: FaqItem[] = [
+export interface TroubleshootingEntry {
+  id: string;
+  symptom: string;
+  cause: string;
+  solution: string;
+}
+
+/**
+ * Canonical, offline knowledge base behind both the static "Aide" accordions
+ * (`apps/web/src/app/(app)/aide/page.tsx`) and the local RAG assistant
+ * (`retrieval.ts`) — a single source of truth so the two never drift apart.
+ * Content is condensed from `GUIDE_UTILISATEUR_COMPLET.md`.
+ */
+export const FAQ_ENTRIES: FaqEntry[] = [
   {
     id: "pos-scan",
     domain: "pos",
@@ -68,7 +68,7 @@ const FAQ_ITEMS: FaqItem[] = [
     domain: "stock",
     question: "Comment fonctionne le réapprovisionnement automatique ?",
     answer:
-      "Achats → Réapprovisionnement → \"Lancer le contrôle\" scanne tous les produits sous seuil. Pour chaque produit avec une cotation fournisseur active, un bon de commande brouillon est généré automatiquement (fournisseur le moins cher) ; sinon une notification est créée. ⚠️ Ce contrôle n'est pas planifié automatiquement — à relancer manuellement à intervalle régulier.",
+      "Achats → Réapprovisionnement → \"Lancer le contrôle\" scanne tous les produits sous seuil. Pour chaque produit avec une cotation fournisseur active, un bon de commande brouillon est généré automatiquement (fournisseur le moins cher) ; sinon une notification est créée. Ce contrôle n'est pas planifié automatiquement — à relancer manuellement à intervalle régulier.",
   },
   {
     id: "stock-grn",
@@ -142,252 +142,73 @@ const FAQ_ITEMS: FaqItem[] = [
   },
 ];
 
-interface TroubleshootingRow {
-  symptom: string;
-  cause: string;
-  solution: string;
-}
-
-const TROUBLESHOOTING_ROWS: TroubleshootingRow[] = [
+export const TROUBLESHOOTING_ENTRIES: TroubleshootingEntry[] = [
   {
+    id: "err-offline-sync",
     symptom: 'Panier ou vente qui ne se synchronise pas ("Hors-ligne" persistant)',
     cause: "Perte de connexion réseau pendant une vente POS — les actions sont mises en file dans le navigateur en attendant le retour du réseau.",
     solution:
       "Vérifier la connexion internet du poste. Dès qu'elle revient, la file se rejoue automatiquement — patienter quelques secondes. Si le compteur ne bouge pas après 1 minute, recharger la page (rien n'est perdu, la file est conservée localement).",
   },
   {
+    id: "err-printer-not-found",
     symptom: '"Imprimer (USB)" grisé ou absent',
     cause: "Le navigateur ne supporte pas WebUSB (Firefox, Safari), ou aucune imprimante ESC/POS n'est branchée/autorisée.",
     solution:
       "Utiliser Chrome ou Edge pour l'impression USB. Sinon, utiliser le champ \"IP imprimante\" + \"Imprimer (réseau)\" avec une imprimante connectée au réseau local (port 9100).",
   },
   {
+    id: "err-mfa-invalid-token",
     symptom: "Code MFA refusé (\"Code invalide ou expiré\")",
     cause: "Horloge du téléphone désynchronisée, ou code déjà expiré (validité 30 secondes).",
     solution:
       "Vérifier que la date/heure du téléphone est réglée automatiquement. Attendre le prochain code plutôt que réutiliser un ancien. En dernier recours, utiliser un des codes de secours fournis à l'activation (usage unique chacun).",
   },
   {
+    id: "err-exchange-rate-missing",
     symptom: "Devise ou taux de change manquant sur une écriture/facture multi-devise",
     cause: "Aucun taux de change n'est configuré pour la devise et la date de la transaction.",
     solution:
       "Renseigner le taux de change applicable dans la configuration des devises avant de valider la transaction. Par défaut l'ERP est configuré en devise unique (XOF), ce qui évite ce cas.",
   },
   {
+    id: "err-generic-invalid-credentials",
     symptom: '"Identifiants invalides" alors que le mot de passe est correct',
     cause: "Ce message générique couvre toute erreur de connexion, y compris une indisponibilité temporaire de l'API ou de la base de données.",
     solution: "Réessayer après quelques secondes. Si le problème persiste, contacter l'administrateur système pour vérifier que l'API et la base de données sont bien démarrées.",
   },
   {
+    id: "err-stale-service-worker",
     symptom: "Écran figé ou contenu périmé après une mise à jour (Caisse ou Livreur)",
     cause: "Ces deux applications fonctionnent en PWA avec mise en cache locale — un ancien cache peut masquer la nouvelle version.",
     solution:
       "Fermer complètement l'application puis la rouvrir. Si le problème persiste, vider le cache du navigateur pour ce site puis se reconnecter.",
   },
   {
+    id: "err-camera-scan-fail",
     symptom: "Le scan caméra ne détecte pas le code-barres",
     cause: "Éclairage insuffisant, code-barres endommagé/flou, ou permission caméra refusée par le navigateur.",
     solution:
       "Vérifier l'autorisation caméra (icône dans la barre d'adresse). Rapprocher le code-barres et stabiliser l'appareil. En cas d'échec répété, utiliser la douchette physique ou la recherche manuelle.",
   },
   {
+    id: "err-hid-scanner-not-recognized",
     symptom: "Douchette USB/Bluetooth qui ne scanne rien",
     cause: "La douchette n'est pas reconnue en mode \"clavier\" (HID), ou le focus n'est pas sur la page de caisse.",
     solution:
       "Vérifier que la douchette est configurée en mode \"clavier USB\" (HID) et non en mode série. Cliquer une fois sur la page de caisse pour lui donner le focus, puis réessayer.",
   },
   {
+    id: "err-journal-entry-unbalanced",
     symptom: 'Écriture comptable refusée ("non équilibrée")',
     cause: "Le total des lignes au débit ne correspond pas au total au crédit.",
     solution: "Ajuster les montants ligne par ligne jusqu'à obtenir Σdébit = Σcrédit — contrôle bloquant volontaire pour garantir l'intégrité comptable.",
   },
   {
+    id: "err-reorder-check-not-scheduled",
     symptom: "Notification de stock bas jamais reçue malgré un produit sous seuil",
     cause: "Le contrôle de réapprovisionnement n'est pas planifié automatiquement dans cette version.",
     solution:
       "Se rendre dans Achats → Réapprovisionnement et cliquer sur \"Lancer le contrôle\" régulièrement, ou demander à l'administrateur de planifier un appel externe à cette action.",
   },
 ];
-
-const DOMAIN_ORDER: Domain[] = ["pos", "stock", "accounting", "hr", "logistics"];
-
-export default function AidePage() {
-  const { t } = useI18n();
-  const [search, setSearch] = useState("");
-  const [domain, setDomain] = useState<Domain | "all">("all");
-
-  const [aiQuestion, setAiQuestion] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiAnswer, setAiAnswer] = useState<AskAnswer | null>(null);
-  const [aiAsked, setAiAsked] = useState(false);
-
-  async function handleAskAi(event: FormEvent) {
-    event.preventDefault();
-    if (!aiQuestion.trim()) return;
-    setAiLoading(true);
-    setAiAsked(true);
-    try {
-      const result = await apiFetch<AskAnswer>("/local-ai/ask", {
-        method: "POST",
-        body: JSON.stringify({ question: aiQuestion, domain: domain !== "all" ? domain : undefined }),
-      });
-      setAiAnswer(result);
-    } catch {
-      setAiAnswer({ found: false, matchedTitle: null, answer: null, confidence: 0 });
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
-  const domainLabels: Record<Domain | "all", string> = {
-    all: t("help.domainAll"),
-    pos: t("help.domainPos"),
-    stock: t("help.domainStock"),
-    accounting: t("help.domainAccounting"),
-    hr: t("help.domainHr"),
-    logistics: t("help.domainLogistics"),
-  };
-
-  const needle = search.trim().toLowerCase();
-
-  const filteredFaq = useMemo(
-    () =>
-      FAQ_ITEMS.filter((item) => {
-        if (domain !== "all" && item.domain !== domain) return false;
-        if (!needle) return true;
-        return item.question.toLowerCase().includes(needle) || item.answer.toLowerCase().includes(needle);
-      }),
-    [domain, needle],
-  );
-
-  const filteredTroubleshooting = useMemo(
-    () =>
-      TROUBLESHOOTING_ROWS.filter((row) => {
-        if (!needle) return true;
-        return (
-          row.symptom.toLowerCase().includes(needle) ||
-          row.cause.toLowerCase().includes(needle) ||
-          row.solution.toLowerCase().includes(needle)
-        );
-      }),
-    [needle],
-  );
-
-  const noResults = filteredFaq.length === 0 && filteredTroubleshooting.length === 0;
-
-  return (
-    <div className="max-w-3xl space-y-6">
-      <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{t("help.title")}</h1>
-
-      <section className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 dark:border-indigo-900 dark:bg-indigo-950/30">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t("help.assistantTitle")}</h2>
-          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
-            {t("help.assistantOfflineBadge")}
-          </span>
-        </div>
-        <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{t("help.assistantDescription")}</p>
-        <form onSubmit={handleAskAi} className="flex flex-col gap-2 sm:flex-row">
-          <input
-            type="text"
-            value={aiQuestion}
-            onChange={(e) => setAiQuestion(e.target.value)}
-            placeholder={t("help.assistantPlaceholder")}
-            className="flex-1 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-          />
-          <button
-            type="submit"
-            disabled={aiLoading}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-          >
-            {aiLoading ? t("help.assistantThinking") : t("help.assistantAsk")}
-          </button>
-        </form>
-
-        {aiAsked && !aiLoading && (
-          <div className="mt-3 rounded-lg bg-white p-3 text-sm dark:bg-slate-900">
-            {aiAnswer?.found ? (
-              <>
-                <p className="mb-1 text-xs font-medium text-indigo-600 dark:text-indigo-400">{aiAnswer.matchedTitle}</p>
-                <p className="text-slate-700 dark:text-slate-300">{aiAnswer.answer}</p>
-              </>
-            ) : (
-              <p className="text-slate-500 dark:text-slate-400">{t("help.assistantNoAnswer")}</p>
-            )}
-          </div>
-        )}
-      </section>
-
-      <div className="space-y-3">
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t("help.searchPlaceholder")}
-          className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-        />
-        <div className="flex flex-wrap gap-1.5">
-          {(["all", ...DOMAIN_ORDER] as (Domain | "all")[]).map((d) => (
-            <button
-              key={d}
-              type="button"
-              onClick={() => setDomain(d)}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                domain === d
-                  ? "bg-indigo-600 text-white"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-              }`}
-            >
-              {domainLabels[d]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {noResults && <p className="text-sm text-slate-500 dark:text-slate-400">{t("help.noResults")}</p>}
-
-      {filteredFaq.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t("help.guideSection")}</h2>
-          <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
-            {filteredFaq.map((item) => (
-              <details key={item.id} className="group px-4 py-3">
-                <summary className="cursor-pointer list-none text-sm font-medium text-slate-900 marker:content-none dark:text-white">
-                  <span className="mr-2 inline-block text-slate-400 transition-transform group-open:rotate-90">›</span>
-                  {item.question}
-                </summary>
-                <p className="mt-2 pl-4 text-sm text-slate-600 dark:text-slate-300">{item.answer}</p>
-              </details>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {filteredTroubleshooting.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t("help.troubleshootingTitle")}</h2>
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                  <th className="px-4 py-2 font-medium">{t("help.troubleshootingSymptom")}</th>
-                  <th className="px-4 py-2 font-medium">{t("help.troubleshootingCause")}</th>
-                  <th className="px-4 py-2 font-medium">{t("help.troubleshootingSolution")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredTroubleshooting.map((row) => (
-                  <tr key={row.symptom} className="align-top">
-                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white">{row.symptom}</td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.cause}</td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.solution}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
-    </div>
-  );
-}

@@ -810,6 +810,13 @@ const fr = {
   },
   help: {
     title: "Centre d'aide",
+    assistantTitle: "Assistant IA local",
+    assistantOfflineBadge: "100 % hors-ligne",
+    assistantDescription: "Posez une question en langage naturel — réponse générée localement à partir de ce guide, aucune donnée ne quitte votre serveur.",
+    assistantPlaceholder: "ex : Comment clôturer une session de caisse ?",
+    assistantAsk: "Demander",
+    assistantThinking: "Recherche…",
+    assistantNoAnswer: "Aucune correspondance fiable trouvée dans la documentation pour cette question — essayez de la reformuler, ou consultez les guides ci-dessous.",
     searchPlaceholder: "Rechercher un guide, un sujet, un code d'erreur…",
     noResults: "Aucun résultat pour cette recherche.",
     domainAll: "Tous",

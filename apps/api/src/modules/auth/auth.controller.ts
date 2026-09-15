@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Inject, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Inject, Patch, Post, UseGuards } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
@@ -7,12 +7,14 @@ import { ChangePasswordDto, DisableMfaDto, EnableMfaDto, VerifyMfaDto } from "./
 import { Public } from "./decorators/public.decorator";
 import { CurrentAuth } from "../../common/current-auth.decorator";
 import { AuthContext } from "../../common/auth-context";
+import { AuthRateLimitGuard } from "./guards/auth-rate-limit.guard";
 
 @Controller("auth")
 export class AuthController {
   constructor(@Inject(AuthService) private readonly auth: AuthService) {}
 
   @Public()
+  @UseGuards(AuthRateLimitGuard)
   @Post("login")
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto.email, dto.password);
@@ -49,6 +51,7 @@ export class AuthController {
 
   /** Second step of login when the account has MFA enabled — exchanges the challenge token from /auth/login for real tokens. */
   @Public()
+  @UseGuards(AuthRateLimitGuard)
   @Post("mfa/verify")
   verifyMfa(@Body() dto: VerifyMfaDto) {
     return this.auth.verifyMfaLogin(dto.mfaToken, dto.code);
