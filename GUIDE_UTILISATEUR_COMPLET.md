@@ -1,5 +1,8 @@
 # Guide utilisateur complet — IXORIS ERP
 
+*Édité par **KADERSYS SOFTWARE SYSTEMS**. Auteur & ingénierie : **Kader Salim**, ingénieur professionnel en
+informatique.*
+
 Ce guide couvre l'installation, la prise en main par rôle et le dépannage des trois applications de l'ERP IXORIS :
 
 | Application | Usage | URL par défaut |
@@ -276,6 +279,17 @@ Placer chacune derrière un reverse-proxy HTTPS (Nginx/Caddy) avec un sous-domai
 | **Écriture comptable refusée ("non équilibrée")** | Le total des lignes au débit ne correspond pas au total au crédit | Vérifier chaque ligne saisie et ajuster les montants jusqu'à obtenir Σdébit = Σcrédit — l'enregistrement reste bloqué tant que l'écriture n'est pas équilibrée, c'est un contrôle volontaire pour garantir l'intégrité comptable. |
 | **Notification de stock bas jamais reçue malgré un produit sous seuil** | Le contrôle de réapprovisionnement n'est pas planifié automatiquement dans cette version — il doit être déclenché manuellement | Se rendre dans **Achats → Réapprovisionnement** et cliquer sur "Lancer le contrôle" régulièrement (ou demander à l'administrateur de mettre en place une tâche planifiée externe appelant cette action à intervalle régulier). |
 | **Bon de commande ou dépense bloqué en "attente d'approbation" sans avancer** | Une règle d'approbation (GED) impose qu'un titulaire d'un rôle précis valide au-delà d'un certain montant | Contacter un utilisateur portant le rôle exigé par la règle (visible dans **Documents → Approbations**) pour qu'il approuve ou rejette la demande — un administrateur ne peut pas outrepasser cette règle sans porter lui-même le rôle requis. |
+
+---
+
+## D. Aide intégrée & À propos (dans l'application)
+
+Le back-office (`apps/web`) intègre deux modules d'assistance directement accessibles depuis la navigation, pour éviter à l'utilisateur de sortir du logiciel :
+
+- **Aide** (`/aide`) : un centre d'aide avec recherche textuelle et filtre par domaine (Caisse/POS, Stock & achats, Comptabilité SYSCOHADA, RH/Paie, Logistique), reprenant sous forme d'accordéons dépliables les guides pas-à-pas de la section B ci-dessus, ainsi que le tableau de dépannage de la section C.
+- **À propos** (`/a-propos`) : fiche d'identité de l'ERP — version, mention de conformité SYSCOHADA, **statut des services en direct** (API, base de données, temps réel WebSocket, moteur hors-ligne, rafraîchi automatiquement à l'ouverture de la page), ainsi que les crédits de l'éditeur.
+
+**Crédits** : IXORIS ERP est conçu et développé par **Kader Salim**, ingénieur professionnel en informatique, pour **KADERSYS SOFTWARE SYSTEMS**, éditeur du logiciel.
 
 ---
 

@@ -3,6 +3,11 @@
 ERP intégré (Vente/POS, Comptabilité SYSCOHADA, RH/Paie, CRM, Chaîne d'approvisionnement, Livraison &
 Logistique) — architecture cross-platform, synchronisée en temps réel, offline-first, bilingue FR/EN.
 
+Édité par **KADERSYS SOFTWARE SYSTEMS**. Auteur & ingénierie : **Kader Salim**, ingénieur professionnel en
+informatique. Le détail (fiche technique, statut des services, crédits) est disponible dans l'application
+elle-même via le module **À propos** (`/a-propos`), et l'aide contextuelle via le module **Aide** (`/aide`) —
+voir [État d'avancement](#état-davancement).
+
 ## Stack
 
 | Domaine | Choix |
@@ -31,7 +36,7 @@ PROJET-IXORIS/
 │   │   ├── prisma/schema.prisma
 │   │   └── seed/
 │   ├── types/                    # DTOs / schémas Zod partagés front <-> back
-│   ├── ui/                        # Composants React partagés (ex: PasswordInput avec jauge de robustesse)
+│   ├── ui/                        # Composants React partagés (PasswordInput, IxorisLogo)
 │   ├── accounting-engine/          # Moteur SYSCOHADA : écritures, Bilan, Compte de résultat, SIG, rapprochement bancaire
 │   ├── payroll-engine/               # Calcul de paie, cotisations, génération bulletin
 │   ├── escpos/                        # Formatage tickets/bulletins pour imprimantes thermiques
@@ -254,6 +259,7 @@ Une fois `pnpm db:seed` exécuté, utiliser les [identifiants de démonstration]
 - ✅ **GED & workflows d'approbation — fonctionnel** : `apps/api/src/modules/documents` — pièces jointes polymorphes (`Document.attachableType`/`attachableId`, même convention que `AuditLog`/`StockMovement`) attachables à une facture, écriture, employé, actif ou bon de commande ; règles d'approbation configurables par seuil (`ApprovalRule.minAmount` + rôle requis) sur les bons de commande et les dépenses de caisse — au-delà du seuil, l'envoi du bon de commande (`POST /supply-chain/purchase-orders/:id/send`) ou le postage de la dépense (`POST /treasury/cashboxes/movements/:id/post`) est retenu jusqu'à ce qu'un titulaire du rôle requis approuve (`POST /approvals/requests/:id/decide`).
 - ✅ **`apps/web` (back-office) — fonctionnel** : écrans pour tous les modules ci-dessus (dashboard temps réel avec notifications, comptabilité, paie, RH, CRM, stock, achats, livraisons + carte de suivi GPS, trésorerie, crédit, actifs, GED, administration).
 - ✅ **Sécurité — MFA (TOTP) & robustesse du mot de passe — fonctionnel** : [`packages/ui`](packages/ui) fournit un composant `PasswordInput` partagé (bascule affichage/masquage, jauge de robustesse à 5 niveaux avec indices de critères manquants) intégré aux écrans de connexion des 3 apps, à la création d'utilisateur (admin) et au changement de mot de passe. Le module `auth` gagne une authentification à deux facteurs TOTP (RFC 6238/4226) **implémentée nativement sur `crypto`** (aucune dépendance externe — `otplib`/`qrcode` indisponibles sans accès réseau dans cet environnement) : `POST /auth/mfa/setup|enable|disable`, connexion en 2 étapes (`POST /auth/login` renvoie un `mfaToken` transitoire si le MFA est actif, échangé contre les tokens finaux via `POST /auth/mfa/verify`), 10 codes de secours à usage unique générés à l'activation (hashés en base, jamais stockés en clair). Auto-enrôlement en libre-service via le nouvel écran `apps/web/profil` (QR code rendu côté navigateur via `qrcode` chargé en CDN au runtime — même pattern que Leaflet pour la carte logistique — avec repli "saisie manuelle" du secret) ; un administrateur peut rendre le MFA obligatoire par utilisateur (`User.mfaRequired`, bouton "Exiger le MFA" dans `apps/web/admin`), auquel cas un écran de blocage (présent sur les 3 apps) retient l'utilisateur jusqu'à configuration effective.
+- ✅ **Branding, module Aide & module À propos — fonctionnel** : logo officiel **IXORIS** (monogramme "anneau ouvert + flèche" validé avec l'éditeur), composant [`IxorisLogo`](packages/ui/src/IxorisLogo.tsx) partagé et intégré à la navigation d'`apps/web`, aux écrans de connexion d'`apps/pos`/`apps/delivery`, aux bulletins de paie PDF (`packages/payroll-engine`, dessiné en vecteur natif PDFKit — aucune image rasterisée) et aux tickets de caisse thermiques (`packages/escpos`, bitmap monochrome généré depuis la même géométrie, commande ESC/POS `GS v 0`). Nouvelle page `apps/web/a-propos` : crédits éditeur (Kader Salim / KADERSYS SOFTWARE SYSTEMS), fiche technique, et **statut des services en direct** (API + base de données via un nouvel endpoint public `GET /health` côté `apps/api`, WebSocket, moteur hors-ligne détecté côté navigateur). Nouvelle page `apps/web/aide` : centre d'aide avec recherche et filtre par domaine (Caisse, Stock, Comptabilité, RH/Paie, Logistique) sur des guides condensés à partir de [GUIDE_UTILISATEUR_COMPLET.md](GUIDE_UTILISATEUR_COMPLET.md), plus le tableau de dépannage intégré.
 - ⏳ **À construire** : écrans d'administration fine des rôles/permissions (au-delà de la gestion des utilisateurs déjà présente), retro-conversion i18n complète du reste de l'UI POS.
 
 ### Limites connues (à lever avant prod)
@@ -284,6 +290,9 @@ Une fois `pnpm db:seed` exécuté, utiliser les [identifiants de démonstration]
 - Le QR code d'activation MFA (`apps/web/profil`) charge la lib `qrcode` depuis un CDN au runtime navigateur — nécessite que le navigateur de l'utilisateur final ait accès à internet (repli "saisie manuelle du secret" toujours disponible sinon), même caveat que la carte Leaflet du module logistique.
 - Un code TOTP n'est pas protégé contre la réutilisation immédiate dans sa fenêtre de 30s (contrairement aux codes de secours, à usage unique) — simplification courante pour ce type d'implémentation, à durcir (verrou anti-rejeu par utilisateur) avant un usage à haute exigence de sécurité.
 - La configuration du MFA (scan du QR, activation/désactivation) n'existe que sur `apps/web` — un utilisateur de `apps/pos`/`apps/delivery` dont le MFA est rendu obligatoire doit se connecter une fois au back-office pour le configurer ; ces deux apps n'affichent qu'un écran de blocage renvoyant vers le back-office.
+- Le logo IXORIS imprimé sur les tickets thermiques (`packages/escpos`) utilise la commande raster ESC/POS `GS v 0`, générée et vérifiée par simulation logicielle (aperçu bitmap) — elle n'a pas pu être testée sur une imprimante thermique physique dans cet environnement ; à valider sur le matériel cible avant une mise en production (`showLogo: false` permet de le désactiver ticket par ticket en attendant).
+- Il n'existe pas encore de génération de facture PDF dédiée (contrairement au bulletin de paie) — le module Comptabilité gère les factures comme des données consultables/imprimables depuis le navigateur, pas comme un export PDF avec en-tête et logo ; à ajouter si un PDF de facture "officiel" est requis.
+- La mention légale de la page À propos utilise volontairement la formulation "aligné sur le plan comptable SYSCOHADA Révisé" plutôt que "certifié conforme" — le moteur comptable est correct et testé (voir plus haut), mais aucune certification tierce n'a été obtenue ; à ajuster si une telle certification est un jour réalisée.
 
 ## Identifiants de démonstration (après `pnpm db:seed`)
 

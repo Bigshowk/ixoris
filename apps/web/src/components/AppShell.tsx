@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { IxorisLogo } from "@ixoris/ui";
 import { useI18n } from "../lib/i18n-context";
 import { ThemeToggle } from "./ThemeToggle";
 import { LocaleToggle } from "./LocaleToggle";
@@ -29,6 +30,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/documents", labelKey: "nav.documents", icon: "📎" },
   { href: "/admin", labelKey: "nav.admin", icon: "⚙️" },
   { href: "/profil", labelKey: "nav.profile", icon: "👤" },
+  { href: "/aide", labelKey: "nav.help", icon: "❓" },
+  { href: "/a-propos", labelKey: "nav.about", icon: "ℹ️" },
 ];
 
 export interface AppShellProps {
@@ -63,7 +66,9 @@ export function AppShell({ user, onLogout, children }: AppShellProps) {
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="px-4 py-4 text-base font-semibold text-slate-900 dark:text-white">{t("web.appTitle")}</div>
+        <div className="px-4 py-4 text-slate-900 dark:text-white">
+          <IxorisLogo />
+        </div>
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-2">
           {NAV_ITEMS.map((item) => {
             const active = pathname === item.href || pathname?.startsWith(`${item.href}/`);

@@ -113,6 +113,18 @@ export class EscPosBuilder {
     return this;
   }
 
+  /**
+   * Prints a 1-bit monochrome raster image (GS v 0 command — supported by virtually every
+   * ESC/POS-compatible thermal printer). `widthPx` must be a multiple of 8; `bitmap` is
+   * row-major, MSB-first, 1 = black dot, length = (widthPx / 8) * heightPx.
+   */
+  rasterImage(bitmap: Uint8Array, widthPx: number, heightPx: number) {
+    const widthBytes = widthPx / 8;
+    this.push(GS, 0x76, 0x30, 0x00, widthBytes & 0xff, (widthBytes >> 8) & 0xff, heightPx & 0xff, (heightPx >> 8) & 0xff);
+    this.bytes.push(...bitmap);
+    return this;
+  }
+
   /** Opens the cash drawer connected to the printer's RJ11 port. */
   openDrawer() {
     return this.push(ESC, 0x70, 0x00, 0x19, 0xfa);
