@@ -2,6 +2,8 @@
 
 Ressources commerciales prêtes à l'emploi pour la prospection et le lancement d'IXORIS ERP auprès des PME et commerces d'Afrique de l'Ouest francophone.
 
+> **Positionnement phare** : *"Premier ERP SYSCOHADA doté d'un Agent IA génératif 100 % local, souverain et fonctionnant sans connexion Internet."* L'assistant s'appuie sur un moteur de recherche documentaire toujours actif (aucune installation requise) et, dès qu'un serveur de modèle de langage local est démarré sur le poste du client (procédure en une commande, détaillée dans le README technique), bascule automatiquement sur des réponses rédigées par IA — sans jamais faire transiter la moindre donnée par internet, dans les deux cas.
+
 > ⚠️ **Note de cadrage** : les tarifs de la section 4 sont des **points de départ indicatifs**, à ajuster selon votre marché, vos coûts d'hébergement/support et votre positionnement concurrentiel avant toute publication officielle. De même, les taux de cotisations sociales (CNPS/ITS) intégrés au module Paie sont des valeurs d'exemple à faire valider par un expert-comptable avant toute promesse de conformité fiscale à un client — communiquer sur "aligné SYSCOHADA" plutôt que sur "certifié conforme".
 
 ---
@@ -24,7 +26,7 @@ Ressources commerciales prêtes à l'emploi pour la prospection et le lancement 
 > 1. **Une seule caisse pour toute l'équipe** — chaque vente scannée met à jour le stock en temps réel, sur tous vos postes en même temps, même sur plusieurs boutiques.
 > 2. **Une comptabilité qui se fait toute seule** — chaque vente, chaque facture, chaque paie génère automatiquement son écriture, selon les normes SYSCOHADA. Votre comptable gagne des jours chaque mois.
 > 3. **Ça marche même sans internet** — une coupure réseau n'arrête jamais la caisse, tout se resynchronise automatiquement dès que la connexion revient.
-> 4. **Un assistant intelligent intégré, 100% local** — il répond aux questions de vos équipes et repère les mouvements de stock suspects, sans jamais envoyer la moindre donnée sur internet. Même votre IA fonctionne hors-ligne."
+> 4. **Un Agent IA génératif 100% local et souverain** — il répond aux questions de vos équipes en langage naturel, avec des réponses rédigées comme un vrai assistant, et repère les mouvements de stock suspects — sans jamais envoyer la moindre donnée sur internet. Premier ERP SYSCOHADA à proposer ça, et ça fonctionne même sans connexion."
 
 **[2:00 – La preuve / différenciation, 40 secondes]**
 
@@ -43,8 +45,8 @@ Ressources commerciales prêtes à l'emploi pour la prospection et le lancement 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                     IXORIS ERP                            │
-│  La gestion complète de votre commerce, augmentée par     │
-│         une IA 100% locale et confidentielle.              │
+│   Premier ERP SYSCOHADA doté d'un Agent IA génératif       │
+│    100% local, souverain, sans connexion Internet.         │
 └─────────────────────────────────────────────────────────┘
 
 LES 7 AVANTAGES CONCURRENTIELS D'IXORIS
@@ -79,12 +81,13 @@ LES 7 AVANTAGES CONCURRENTIELS D'IXORIS
    client, Actifs — tout est connecté, rien n'est ressaisi
    deux fois.
 
-7. 🤖 ASSISTANT IA 100% LOCAL ET CONFIDENTIEL
-   Vos équipes posent leurs questions en langage naturel et
-   sont dépannées instantanément ; les anomalies de stock sont
-   détectées automatiquement. Aucune connexion internet requise,
-   aucune donnée envoyée à l'extérieur — l'IA tourne entièrement
-   sur vos propres serveurs.
+7. 🤖 AGENT IA GÉNÉRATIF 100% LOCAL ET SOUVERAIN
+   Premier ERP SYSCOHADA doté d'un vrai assistant IA génératif
+   fonctionnant sans connexion internet : vos équipes posent
+   leurs questions en langage naturel et reçoivent une réponse
+   rédigée ; les anomalies de stock sont détectées automatique-
+   ment. Aucune donnée envoyée à l'extérieur — l'IA tourne
+   entièrement sur vos propres serveurs.
 
 ─────────────────────────────────────────────────────────
 

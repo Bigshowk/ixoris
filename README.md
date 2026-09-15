@@ -89,15 +89,37 @@ Un audit d'architecture et de sécurité complet (authentification/RBAC, synchro
 
 ## Agent IA Local (Offline AI)
 
-`packages/local-ai` (framework-agnostic, zéro dépendance externe) + module `apps/api/src/modules/local-ai` exposent un assistant IA qui fonctionne **entièrement à l'intérieur du processus API** — aucun appel réseau sortant, aucune clé API, aucune donnée envoyée à un service tiers.
+`packages/local-ai` (framework-agnostic) + module `apps/api/src/modules/local-ai` exposent un assistant IA **hybride, entièrement local** : un vrai LLM génératif quand un serveur d'inférence local est disponible, avec repli automatique et transparent sur un moteur de recherche documentaire (RAG léger) sinon. Dans les deux cas, **aucun appel réseau sortant vers l'extérieur, aucune clé API, aucune donnée envoyée à un service tiers** — tout tourne sur la machine du client.
 
-> **Précision honnête sur l'architecture** : cet environnement de développement n'a pas d'accès réseau pour télécharger des poids de modèle (LLM quantifié type GGUF/ONNX). Plutôt que de simuler une IA générative, l'agent est construit comme un **moteur de recherche local + un système à base de règles explicables** — une architecture réellement fonctionnelle et vérifiable, avec un point d'extension clair pour brancher un vrai moteur d'inférence local (`node-llama-cpp`, ONNX Runtime...) une fois le déploiement cible capable de fournir les poids du modèle. Voir `packages/local-ai/src/retrieval.ts` pour le raisonnement détaillé.
+### Architecture hybride (LLM local + RAG)
 
-Trois capacités, toutes accessibles via l'API (`POST /local-ai/ask`, `GET /local-ai/stock/anomalies`, `POST /local-ai/accounting/suggest-entry`) :
+1. **Fournisseur d'inférence local** — `packages/local-ai/src/llm-provider.ts` (`OllamaProvider`) parle le protocole HTTP d'[Ollama](https://ollama.com) (`GET /api/tags`, `POST /api/generate`), le standard de facto pour exécuter des modèles quantifiés (Mistral, Llama 3, Phi-3...) sur une seule machine. Tout autre serveur compatible (le binaire `server` de llama.cpp, LM Studio) fonctionne sans modification, tant qu'il expose les deux mêmes routes.
+2. **Détection automatique** — `packages/local-ai/src/hybrid-assistant.ts` sonde `OLLAMA_BASE_URL` (défaut `http://localhost:11434`) avec un délai court (1,5 s), mis en cache 30 s pour ne pas resonder le réseau à chaque frappe. Un modèle disponible est choisi par ordre de préférence (`phi3:mini` → `mistral:7b-instruct` → `llama3:8b`), sinon le premier modèle installé.
+3. **Génération de réponse raisonnée** — si un LLM est détecté : le RAG (`retrieval.ts`, recherche TF-IDF) extrait d'abord les passages pertinents de la documentation, `prompt-builder.ts` construit un prompt structuré (rôle d'expert IXORIS + contexte extrait + question), puis le LLM local génère une réponse synthétique en français, citée avec ses sources. **Aucune dépendance au réseau Internet à aucune étape.**
+4. **Repli hybride sans erreur** — si aucun serveur LLM n'est détecté, **ou** si l'appel échoue pour n'importe quelle raison (serveur qui plante, mémoire insuffisante, timeout), l'assistant bascule silencieusement sur le moteur RAG extractif (réponse = passage documentaire le plus pertinent, sans génération de texte) — jamais d'erreur exposée à l'utilisateur. Le statut réel est exposé via `GET /local-ai/status` et affiché dans l'onglet **Aide** :
+   - `Statut IA : Agent LLM Local Actif (Hors-ligne)` — un serveur Ollama répond, la réponse est générée.
+   - `Statut IA : Mode RAG Léger (LLM non détecté)` — repli automatique, réponse extractive.
 
-1. **Super-Assistant Support (RAG local)** — `packages/local-ai/src/retrieval.ts` : recherche lexicale TF-IDF sur une base de connaissance hors-ligne (synthétisée depuis `GUIDE_UTILISATEUR_COMPLET.md`), avec repli accent-insensible et normalisation française. Répond de façon extractive (renvoie le passage le plus pertinent, avec un score de confiance) plutôt que de générer un texte libre. Intégré directement dans l'onglet **Aide** (`apps/web/aide`) sous forme d'un champ de question en langage naturel.
-2. **Détection d'anomalies de stock** — `packages/local-ai/src/anomaly-detection.ts` : statistiques déterministes et explicables sur les mouvements de stock récents (stock négatif, écart-type/z-score par rapport à l'historique du produit, ajustements manuels sans référence, corrections répétées en moins de 24h) — chaque anomalie porte une justification en langage clair, pas de boîte noire.
-3. **Suggestion d'écritures comptables** — `packages/local-ai/src/accounting-suggest.ts` : suggère des comptes du plan SYSCOHADA à partir d'une description libre (mots-clés), pour accélérer la saisie manuelle — ne poste jamais d'écriture automatiquement, l'utilisateur garde toujours la décision finale.
+### Installer et lancer le LLM local (Ollama)
+
+Optionnel — l'ERP fonctionne sans, en mode RAG léger. Pour activer la génération :
+
+```bash
+# 1. Installer Ollama (Windows/macOS/Linux) : https://ollama.com/download
+# 2. Télécharger un modèle d'instruction léger (choisir selon la RAM disponible) :
+ollama pull phi3:mini            # ~2,3 Go — recommandé sur poste standard (8-16 Go RAM)
+# ou : ollama pull mistral:7b-instruct   # ~4,1 Go — meilleure qualité, 16 Go+ RAM recommandés
+# 3. Démarrer le serveur (généralement automatique après installation) :
+ollama serve
+```
+
+Dès qu'`ollama serve` répond sur `http://localhost:11434` (même machine que l'API), l'onglet Aide bascule automatiquement sur `Agent LLM Local Actif` au prochain rafraîchissement du statut — aucune configuration côté IXORIS n'est nécessaire au-delà de la variable optionnelle `OLLAMA_BASE_URL` (voir `.env.example`) si Ollama tourne sur une autre adresse.
+
+### Les trois capacités (accessibles via l'API)
+
+1. **Super-Assistant Support (`POST /local-ai/ask`, `GET /local-ai/status`)** — décrit ci-dessus, intégré à l'onglet **Aide** (`apps/web/aide`) sous forme d'un champ de question en langage naturel avec badge de statut du moteur.
+2. **Détection d'anomalies de stock (`GET /local-ai/stock/anomalies`)** — `packages/local-ai/src/anomaly-detection.ts` : statistiques déterministes et explicables sur les mouvements de stock récents (stock négatif, écart-type/z-score par rapport à l'historique du produit, ajustements manuels sans référence, corrections répétées en moins de 24h) — chaque anomalie porte une justification en langage clair, pas de boîte noire. Reste volontairement à base de règles (pas de génération LLM) pour garder ces alertes 100 % explicables et auditables.
+3. **Suggestion d'écritures comptables (`POST /local-ai/accounting/suggest-entry`)** — `packages/local-ai/src/accounting-suggest.ts` : suggère des comptes du plan SYSCOHADA à partir d'une description libre (mots-clés), pour accélérer la saisie manuelle — ne poste jamais d'écriture automatiquement, l'utilisateur garde toujours la décision finale.
 
 ## Schéma de base de données
 
@@ -195,7 +217,7 @@ Le fichier `.env` (racine, lu par toutes les apps via Turborepo) contient :
 |---|---|---|
 | `DATABASE_URL` | Connexion Prisma → Postgres | `postgresql://ixoris:ixoris@localhost:5432/ixoris_erp` |
 | `REDIS_URL` | Connexion Redis | `redis://localhost:6379` |
-| `JWT_SECRET` | Signature des tokens d'accès/refresh | ⚠️ à changer en prod |
+| `JWT_SECRET` | Signature des tokens d'accès/refresh | **obligatoire** — l'API refuse de démarrer si absent ou laissé à `"change-me"` (voir [Sécurité & durcissement](#sécurité--durcissement)) |
 | `JWT_EXPIRES_IN` / `REFRESH_TOKEN_EXPIRES_IN` | Durées de vie des tokens | `1d` / `30d` |
 | `API_PORT` | Port HTTP de `apps/api` | `4000` |
 | `CORS_ORIGIN` | Origines autorisées côté API | `http://localhost:3000,http://localhost:3001,http://localhost:3002` — **doit inclure le port de chaque frontend lancé** (web/pos/delivery) sous peine d'erreurs réseau silencieuses côté navigateur |
@@ -203,6 +225,7 @@ Le fichier `.env` (racine, lu par toutes les apps via Turborepo) contient :
 | `NEXT_PUBLIC_WS_URL` | URL du WebSocket (sync temps réel POS) | `ws://localhost:4001` |
 | `NOTIFICATION_MODE` | `log` (défaut, sûr) ou `live` (envoi réel SMTP/Twilio) | `log` |
 | `SMTP_*` / `TWILIO_*` | Identifiants des fournisseurs de notification réels | vides — uniquement nécessaires si `NOTIFICATION_MODE=live` |
+| `OLLAMA_BASE_URL` | Adresse du serveur LLM local pour l'Agent IA (voir [Agent IA Local](#agent-ia-local-offline-ai)) | `http://localhost:11434` — optionnel, repli automatique sur le RAG léger si injoignable |
 
 ### 4. Installation des dépendances
 
@@ -287,7 +310,7 @@ Une fois `pnpm db:seed` exécuté, utiliser les [identifiants de démonstration]
 - ✅ **Sécurité — MFA (TOTP) & robustesse du mot de passe — fonctionnel** : [`packages/ui`](packages/ui) fournit un composant `PasswordInput` partagé (bascule affichage/masquage, jauge de robustesse à 5 niveaux avec indices de critères manquants) intégré aux écrans de connexion des 3 apps, à la création d'utilisateur (admin) et au changement de mot de passe. Le module `auth` gagne une authentification à deux facteurs TOTP (RFC 6238/4226) **implémentée nativement sur `crypto`** (aucune dépendance externe — `otplib`/`qrcode` indisponibles sans accès réseau dans cet environnement) : `POST /auth/mfa/setup|enable|disable`, connexion en 2 étapes (`POST /auth/login` renvoie un `mfaToken` transitoire si le MFA est actif, échangé contre les tokens finaux via `POST /auth/mfa/verify`), 10 codes de secours à usage unique générés à l'activation (hashés en base, jamais stockés en clair). Auto-enrôlement en libre-service via le nouvel écran `apps/web/profil` (QR code rendu côté navigateur via `qrcode` chargé en CDN au runtime — même pattern que Leaflet pour la carte logistique — avec repli "saisie manuelle" du secret) ; un administrateur peut rendre le MFA obligatoire par utilisateur (`User.mfaRequired`, bouton "Exiger le MFA" dans `apps/web/admin`), auquel cas un écran de blocage (présent sur les 3 apps) retient l'utilisateur jusqu'à configuration effective.
 - ✅ **Branding, module Aide & module À propos — fonctionnel** : logo officiel **IXORIS** (monogramme "anneau ouvert + flèche" validé avec l'éditeur), composant [`IxorisLogo`](packages/ui/src/IxorisLogo.tsx) partagé et intégré à la navigation d'`apps/web`, aux écrans de connexion d'`apps/pos`/`apps/delivery`, aux bulletins de paie PDF (`packages/payroll-engine`, dessiné en vecteur natif PDFKit — aucune image rasterisée) et aux tickets de caisse thermiques (`packages/escpos`, bitmap monochrome généré depuis la même géométrie, commande ESC/POS `GS v 0`). Nouvelle page `apps/web/a-propos` : crédits éditeur (Kader Salim / KADERSYS SOFTWARE SYSTEMS), fiche technique, et **statut des services en direct** (API + base de données via un nouvel endpoint public `GET /health` côté `apps/api`, WebSocket, moteur hors-ligne détecté côté navigateur). Nouvelle page `apps/web/aide` : centre d'aide avec recherche et filtre par domaine (Caisse, Stock, Comptabilité, RH/Paie, Logistique) sur des guides condensés à partir de [GUIDE_UTILISATEUR_COMPLET.md](GUIDE_UTILISATEUR_COMPLET.md), plus le tableau de dépannage intégré.
 - ✅ **Audit de sécurité & durcissement — fonctionnel** : voir [Sécurité & durcissement](#sécurité--durcissement) ci-dessus et [RAPPORT_SECURITE_ET_REMEDS.md](RAPPORT_SECURITE_ET_REMEDS.md) pour le détail complet (JWT à secret obligatoire, rate-limiting login/MFA, WebSocket POS authentifié, permission dédiée pour l'override de prix en caisse, isolation chauffeur sur les livraisons, révocation de session en cascade, validation stricte des entrées).
-- ✅ **Agent IA Local (Offline AI) — fonctionnel** : voir [Agent IA Local](#agent-ia-local-offline-ai) ci-dessus — [`packages/local-ai`](packages/local-ai) fournit un assistant support (RAG local extractif) intégré à l'onglet Aide, une détection d'anomalies de stock et un assistant de suggestion d'écritures comptables, le tout 100 % local sans dépendance externe.
+- ✅ **Agent IA Local (Offline AI) — architecture hybride fonctionnelle** : voir [Agent IA Local](#agent-ia-local-offline-ai) ci-dessus — [`packages/local-ai`](packages/local-ai) fournit un assistant support **génératif** (LLM local via Ollama, avec repli automatique sur un RAG extractif si aucun serveur LLM n'est détecté) intégré à l'onglet Aide avec badge de statut en direct, une détection d'anomalies de stock et un assistant de suggestion d'écritures comptables — le tout 100 % local, sans appel réseau externe ni clé API. La passerelle d'inférence (`packages/local-ai/src/llm-provider.ts`) a été vérifiée contre un faux serveur Ollama (voir Limites connues) faute de pouvoir installer un vrai modèle dans cet environnement de développement sans accès réseau ; le chemin de repli RAG, lui, a été testé en conditions réelles.
 - ⏳ **À construire** : écrans d'administration fine des rôles/permissions (au-delà de la gestion des utilisateurs déjà présente), retro-conversion i18n complète du reste de l'UI POS.
 
 ### Limites connues (à lever avant prod)
@@ -325,7 +348,9 @@ Une fois `pnpm db:seed` exécuté, utiliser les [identifiants de démonstration]
 - `PermissionsGuard` laisse passer toute route authentifiée sans `@RequirePermissions(...)` explicite (voir [RAPPORT_SECURITE_ET_REMEDS.md](RAPPORT_SECURITE_ET_REMEDS.md) §1.9) — aucune route sensible n'en dépend aujourd'hui, mais c'est un point de vigilance pour tout nouveau contrôleur.
 - La file hors-ligne du POS n'a pas de clé d'idempotence — un rejeu concurrent (ex. deux événements `online` successifs) peut, en théorie, dupliquer un ajout d'article (voir rapport §2.2).
 - `apps/delivery` n'a pas de file hors-ligne (contrairement à `apps/pos`) — une perte de connexion pendant une mise à jour de statut ou une preuve de livraison fait échouer l'action plutôt que de la mettre en attente (voir rapport §2.3).
-- L'Agent IA Local (`packages/local-ai`) est un moteur de recherche local + un système à base de règles, pas un modèle génératif — voir la section [Agent IA Local](#agent-ia-local-offline-ai) pour le raisonnement ; le point d'extension pour un vrai LLM local quantifié est documenté dans `packages/local-ai/src/retrieval.ts`.
+- La passerelle LLM local (`packages/local-ai/src/llm-provider.ts`, protocole Ollama) a été implémentée et vérifiée contre un faux serveur HTTP imitant les routes `/api/tags`/`/api/generate` d'Ollama — cet environnement de développement n'a pas d'accès réseau pour installer un vrai serveur Ollama ni télécharger un modèle. Le contrat d'API suivi est celui documenté officiellement par Ollama ; à confirmer avec une instance réelle avant mise en production. Le chemin de repli RAG (quand aucun LLM n'est détecté), lui, a été testé en conditions réelles dans le navigateur.
+- Le détecteur de serveur LLM (`getLlmStatus`) met en cache le résultat 30 secondes — démarrer ou arrêter `ollama serve` pendant qu'un utilisateur a l'onglet Aide déjà ouvert peut donc prendre jusqu'à 30 secondes avant que le badge de statut ne se mette à jour.
+- La génération LLM est en mode requête/réponse unique (`stream: false`), pas en flux — une réponse volumineuse sur un modèle lent s'affiche d'un bloc à la fin plutôt que mot par mot ; suffisant pour des réponses courtes (3-6 phrases imposées par le prompt système) mais une future évolution chat plus longue gagnerait à passer en streaming (SSE).
 
 ## Identifiants de démonstration (après `pnpm db:seed`)
 

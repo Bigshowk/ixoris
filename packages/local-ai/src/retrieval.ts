@@ -1,17 +1,17 @@
 import { FAQ_ENTRIES, TROUBLESHOOTING_ENTRIES, FaqEntry, TroubleshootingEntry, HelpDomain } from "./knowledge-base";
 
 /**
- * Retrieval-augmented answering, entirely local: a classic TF-IDF lexical
- * search over the offline knowledge base (no embeddings model, no network
- * call, no GPU). This is the "R" in RAG — the "generation" step is
- * extractive (it returns the best-matching guide answer verbatim, optionally
- * combining two close matches) rather than a free-form LLM completion. See
- * `packages/local-ai/README` note in the main README for why: running an
- * actual quantized generative model needs downloadable weights, which this
- * offline-by-design deployment target cannot assume. The interface below
- * (`answerQuestion`) is intentionally the seam where a real local inference
- * engine (llama.cpp, ONNX Runtime, ...) can be substituted later without
- * touching any caller.
+ * Retrieval, entirely local: a classic TF-IDF lexical search over the
+ * offline knowledge base (no embeddings model, no network call, no GPU).
+ * This is the "R" in RAG. `search()` is the shared retrieval step consumed
+ * by two answering strategies:
+ *   - `answerQuestion` below — extractive (returns the best-matching guide
+ *     passage verbatim), zero dependencies, always available.
+ *   - `hybrid-assistant.ts` — generative, handing the retrieved passages to
+ *     a local LLM (Ollama-compatible) as grounding context when one is
+ *     detected running, and transparently falling back to this same
+ *     extractive path otherwise. See that file for the detection/fallback
+ *     logic, and README.md's "Agent IA Local" section for the architecture.
  */
 
 export type SearchDocumentType = "faq" | "troubleshooting";
@@ -144,7 +144,8 @@ export function search(query: string, options?: { domain?: HelpDomain | null; li
   return ranked.slice(0, options?.limit ?? 5);
 }
 
-const CONFIDENT_THRESHOLD = 0.15;
+/** Exported so `hybrid-assistant.ts` can apply the same confidence bar when deciding whether the retrieved context is even worth handing to the LLM. */
+export const CONFIDENT_THRESHOLD = 0.15;
 
 /**
  * Answers a free-text support question by retrieving the closest knowledge-base

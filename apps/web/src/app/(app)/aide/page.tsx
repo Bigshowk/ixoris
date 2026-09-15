@@ -1,16 +1,30 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../../lib/i18n-context";
 import { apiFetch } from "../../../lib/api";
 
 type Domain = "pos" | "stock" | "accounting" | "hr" | "logistics";
+type AssistantEngine = "llm" | "rag";
+
+interface AssistantSource {
+  title: string;
+  id: string;
+}
 
 interface AskAnswer {
+  engine: AssistantEngine;
+  llmDetected: boolean;
+  llmModel: string | null;
   found: boolean;
-  matchedTitle: string | null;
   answer: string | null;
-  confidence: number;
+  sources: AssistantSource[];
+}
+
+interface LlmStatus {
+  available: boolean;
+  model: string | null;
+  baseUrl: string;
 }
 
 interface FaqItem {
@@ -220,6 +234,21 @@ export default function AidePage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiAnswer, setAiAnswer] = useState<AskAnswer | null>(null);
   const [aiAsked, setAiAsked] = useState(false);
+  const [llmStatus, setLlmStatus] = useState<LlmStatus | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<LlmStatus>("/local-ai/status")
+      .then((status) => {
+        if (!cancelled) setLlmStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setLlmStatus({ available: false, model: null, baseUrl: "" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleAskAi(event: FormEvent) {
     event.preventDefault();
@@ -232,8 +261,11 @@ export default function AidePage() {
         body: JSON.stringify({ question: aiQuestion, domain: domain !== "all" ? domain : undefined }),
       });
       setAiAnswer(result);
+      // The /ask response reflects the engine used for THIS answer — keep the badge in sync
+      // (e.g. if the local LLM appeared/disappeared since the page loaded).
+      setLlmStatus({ available: result.llmDetected, model: result.llmModel, baseUrl: llmStatus?.baseUrl ?? "" });
     } catch {
-      setAiAnswer({ found: false, matchedTitle: null, answer: null, confidence: 0 });
+      setAiAnswer({ engine: "rag", llmDetected: false, llmModel: null, found: false, answer: null, sources: [] });
     } finally {
       setAiLoading(false);
     }
@@ -280,10 +312,22 @@ export default function AidePage() {
       <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{t("help.title")}</h1>
 
       <section className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 dark:border-indigo-900 dark:bg-indigo-950/30">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t("help.assistantTitle")}</h2>
-          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300">
-            {t("help.assistantOfflineBadge")}
+          <span
+            className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${
+              llmStatus === null
+                ? "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                : llmStatus.available
+                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300"
+                  : "bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300"
+            }`}
+          >
+            {llmStatus === null
+              ? t("help.assistantStatusChecking")
+              : llmStatus.available
+                ? t("help.assistantStatusLlmActive")
+                : t("help.assistantStatusRagFallback")}
           </span>
         </div>
         <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{t("help.assistantDescription")}</p>
@@ -308,8 +352,15 @@ export default function AidePage() {
           <div className="mt-3 rounded-lg bg-white p-3 text-sm dark:bg-slate-900">
             {aiAnswer?.found ? (
               <>
-                <p className="mb-1 text-xs font-medium text-indigo-600 dark:text-indigo-400">{aiAnswer.matchedTitle}</p>
-                <p className="text-slate-700 dark:text-slate-300">{aiAnswer.answer}</p>
+                <p className="mb-1 text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                  {aiAnswer.engine === "llm" ? t("help.assistantGenerated") : aiAnswer.sources[0]?.title}
+                </p>
+                <p className="whitespace-pre-line text-slate-700 dark:text-slate-300">{aiAnswer.answer}</p>
+                {aiAnswer.engine === "llm" && aiAnswer.sources.length > 0 && (
+                  <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+                    {t("help.assistantSources")} {aiAnswer.sources.map((s) => s.title).join(" · ")}
+                  </p>
+                )}
               </>
             ) : (
               <p className="text-slate-500 dark:text-slate-400">{t("help.assistantNoAnswer")}</p>

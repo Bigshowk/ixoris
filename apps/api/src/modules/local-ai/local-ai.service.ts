@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { answerQuestion, detectStockAnomalies, suggestAccounts, HelpDomain, StockMovementSample } from "@ixoris/local-ai";
+import { answerHybrid, detectStockAnomalies, getLlmStatus, suggestAccounts, HelpDomain, StockMovementSample } from "@ixoris/local-ai";
 import { PrismaService } from "../../prisma/prisma.service";
 import { toNumber } from "../pos/pos.mappers";
 
@@ -7,9 +7,18 @@ import { toNumber } from "../pos/pos.mappers";
 export class LocalAiService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Local RAG-lite support assistant — see packages/local-ai/src/retrieval.ts for the "why extractive, not generative" rationale. */
+  /**
+   * Hybrid support assistant: generative (local LLM) when one is detected,
+   * transparently falling back to the extractive RAG engine otherwise — see
+   * packages/local-ai/src/hybrid-assistant.ts.
+   */
   ask(question: string, domain?: HelpDomain) {
-    return answerQuestion(question, domain);
+    return answerHybrid(question, domain);
+  }
+
+  /** Backs the "Statut IA" badge in the Aide tab — cheap, cached probe (see getLlmStatus's 30s TTL). */
+  status() {
+    return getLlmStatus();
   }
 
   suggestJournalAccounts(description: string) {
