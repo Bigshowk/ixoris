@@ -1,5 +1,8 @@
 # Guide utilisateur complet — IXORIS ERP
 
+*Édité par **KADERSYS SOFTWARE SYSTEMS**. Auteur & ingénierie : **Kader Salim**, ingénieur professionnel en
+informatique.*
+
 Ce guide couvre l'installation, la prise en main par rôle et le dépannage des trois applications de l'ERP IXORIS :
 
 | Application | Usage | URL par défaut |
@@ -279,4 +282,63 @@ Placer chacune derrière un reverse-proxy HTTPS (Nginx/Caddy) avec un sous-domai
 
 ---
 
-*Ce guide couvre l'usage fonctionnel de l'ERP tel que livré. Pour les aspects techniques (architecture, déploiement, variables d'environnement, schéma de base de données), se référer au [README.md](README.md).*
+## D. Aide intégrée & À propos (dans l'application)
+
+Le back-office (`apps/web`) intègre deux modules d'assistance directement accessibles depuis la navigation, pour éviter à l'utilisateur de sortir du logiciel :
+
+- **Aide** (`/aide`) : un centre d'aide avec recherche textuelle et filtre par domaine (Caisse/POS, Stock & achats, Comptabilité SYSCOHADA, RH/Paie, Logistique), reprenant sous forme d'accordéons dépliables les guides pas-à-pas de la section B ci-dessus, ainsi que le tableau de dépannage de la section C — et le **Super-Assistant IA Local** décrit en section E.
+- **À propos** (`/a-propos`) : fiche d'identité de l'ERP — version, mention de conformité SYSCOHADA, **statut des services en direct** (API, base de données, temps réel WebSocket, moteur hors-ligne, rafraîchi automatiquement à l'ouverture de la page), ainsi que les crédits de l'éditeur.
+
+**Crédits** : IXORIS ERP est conçu et développé par **Kader Salim**, ingénieur professionnel en informatique, pour **KADERSYS SOFTWARE SYSTEMS**, éditeur du logiciel.
+
+---
+
+## E. Super-Assistant IA Local & consignes de sécurité
+
+### Utiliser le Super-Assistant IA Local (onglet Aide)
+
+En haut de la page **Aide** (`/aide`), un encart bleu "Assistant IA local" permet de poser une question en langage naturel. Un badge en haut à droite de l'encart indique en permanence le moteur actif :
+
+- 🟢 **`Statut IA : Agent LLM Local Actif (Hors-ligne)`** — un serveur d'intelligence artificielle local (voir ci-dessous) tourne sur le poste ; les réponses sont **rédigées** par ce modèle de langage à partir de la documentation, avec ses sources citées en bas de réponse.
+- 🟠 **`Statut IA : Mode RAG Léger (LLM non détecté)`** — aucun serveur LLM n'a été détecté ; l'assistant reste pleinement utilisable, mais renvoie directement le passage de documentation le plus pertinent (sans reformulation).
+
+Dans les deux cas, la réponse reste **entièrement calculée sur le serveur de l'entreprise** — aucune donnée saisie n'est jamais envoyée sur internet.
+
+1. Taper une question dans le champ (ex. *"Comment clôturer une session de caisse ?"*, *"Que faire si le code MFA est refusé ?"*) et cliquer sur **Demander**, ou appliquer d'abord un filtre de domaine pour affiner la recherche.
+2. L'assistant retrouve localement, dans la documentation embarquée, les passages les plus pertinents. Si le mode LLM est actif, il les reformule en une réponse rédigée et synthétique (3 à 6 phrases) ; sinon, il affiche directement le passage documentaire correspondant, avec son titre pour vérifier facilement la source.
+3. Si aucune correspondance suffisamment fiable n'est trouvée, l'assistant l'indique clairement plutôt que d'inventer une réponse — reformuler la question ou consulter directement les accordéons/le tableau de dépannage juste en dessous. Ce comportement honnête est volontaire et vaut dans les deux modes : le LLM local est explicitement instruit de ne jamais répondre au-delà de ce que dit la documentation fournie.
+
+**Important — ce que cet assistant est, et n'est pas** : il s'agit d'un moteur de recherche local dans la documentation (technique RAG — *Retrieval-Augmented Generation* — sans génération de texte libre), et non d'un robot conversationnel capable d'improviser une réponse hors du guide. C'est un choix délibéré : la réponse affichée est toujours un extrait vérifiable du guide officiel, jamais une invention. **Aucune donnée saisie n'est envoyée à l'extérieur** — la recherche s'exécute entièrement dans le serveur de l'entreprise, y compris sans connexion internet.
+
+Deux autres capacités du même Agent IA Local, réservées aux utilisateurs habilités (Gestionnaire de Stock, Comptable) :
+- **Détection d'anomalies de stock** — signale les mouvements de stock inhabituels (stock négatif, quantité très supérieure à l'historique du produit, ajustements manuels répétés sans motif documenté), avec une explication en langage clair pour chaque alerte.
+- **Suggestion d'écritures comptables** — à partir d'une description libre (ex. *"achat de carburant véhicule livraison"*), propose un ou plusieurs comptes du plan SYSCOHADA plausibles pour accélérer la saisie manuelle. Une suggestion, jamais une écriture postée automatiquement — la décision et la validation restent toujours humaines.
+
+### Démarrer et vérifier le serveur LLM local (administrateurs)
+
+Activer la génération de réponses par IA (plutôt que le mode RAG léger) est **optionnel** — le logiciel fonctionne pleinement sans. La marche à suivre :
+
+1. **Installer Ollama** sur le poste qui héberge `apps/api` (Windows, macOS ou Linux) : télécharger depuis [ollama.com/download](https://ollama.com/download) et suivre l'installateur.
+2. **Télécharger un modèle** léger adapté à la RAM disponible, depuis un terminal :
+   ```bash
+   ollama pull phi3:mini              # ~2,3 Go — recommandé pour un poste standard (8-16 Go RAM)
+   ```
+   (Alternative plus qualitative si le poste dispose de 16 Go de RAM ou plus : `ollama pull mistral:7b-instruct`.)
+3. **Démarrer le serveur** : `ollama serve` (souvent déjà lancé automatiquement en arrière-plan après l'installation sur Windows/macOS).
+4. **Vérifier la détection** : ouvrir l'onglet **Aide** dans le back-office — le badge doit passer à `Statut IA : Agent LLM Local Actif (Hors-ligne)` dans les 30 secondes suivant le démarrage du serveur (délai de mise en cache du statut). Si le badge reste sur `Mode RAG Léger`, vérifier qu'`ollama serve` tourne bien et qu'aucun pare-feu ne bloque le port `11434` en local.
+5. **Poste dédié ou distant** : si Ollama tourne sur une autre machine que l'API (déconseillé pour la confidentialité, mais possible sur un réseau local fermé), renseigner son adresse dans la variable d'environnement `OLLAMA_BASE_URL` de l'API (voir README.md).
+
+### Consignes de sécurité pour les administrateurs système
+
+Cette version a fait l'objet d'un audit de sécurité dédié (détail complet dans [RAPPORT_SECURITE_ET_REMEDS.md](RAPPORT_SECURITE_ET_REMEDS.md)). Points d'attention à connaître avant une mise en production :
+
+1. **`JWT_SECRET` est obligatoire** — l'API refuse désormais de démarrer si cette variable d'environnement est absente ou laissée à sa valeur d'exemple `"change-me"`. Générer une vraie valeur avec `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` avant tout déploiement.
+2. **Définir `CORS_ORIGIN` explicitement** dans tout environnement autre que le développement local (sinon repli sur les trois origines de développement uniquement, jamais sur un joker ouvert à tous).
+3. **Après cette mise à jour, relancer `pnpm db:seed`** (sans risque, opération idempotente) pour que la nouvelle permission `pos.price.override` soit disponible — sans quoi aucun utilisateur, pas même l'Administrateur Général si son rôle a été édité manuellement en base, ne pourrait modifier un prix en caisse.
+4. **Revoir qui peut modifier un prix en caisse** : cette permission n'est plus accordée automatiquement au rôle Caissier (elle l'était implicitement avant ce durcissement). Si des caissiers ont besoin de cette capacité (remise exceptionnelle, geste commercial), créer un rôle personnalisé dans **Administration → Rôles** avec la permission `pos.price.override` ajoutée.
+5. **Activer le MFA sur les comptes à privilèges** (Administrateur Général, Comptable) via **Administration → Utilisateurs → Exiger le MFA** — voir section B.1. La limitation de débit désormais en place sur la connexion réduit le risque de force brute, mais ne remplace pas la double authentification pour les comptes les plus sensibles.
+6. **Le limiteur de tentatives de connexion** (10 essais / 15 minutes par adresse IP et par compte visé) est un dispositif en mémoire du processus API — parfaitement adapté à une instance unique. Un déploiement en plusieurs instances derrière un répartiteur de charge devra migrer ce compteur vers Redis (voir rapport de sécurité).
+
+---
+
+*Ce guide couvre l'usage fonctionnel de l'ERP tel que livré. Pour les aspects techniques (architecture, déploiement, variables d'environnement, schéma de base de données), se référer au [README.md](README.md), et pour le détail de l'audit de sécurité au [RAPPORT_SECURITE_ET_REMEDS.md](RAPPORT_SECURITE_ET_REMEDS.md).*

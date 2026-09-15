@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { DeliveryStatus } from "@ixoris/database";
 import { PrismaService } from "../../prisma/prisma.service";
 import { toNumber } from "../pos/pos.mappers";
@@ -7,6 +7,7 @@ import { CreateDeliveryDto } from "./dto/create-delivery.dto";
 import { UpdateDeliveryStatusDto, AssignDriverDto } from "./dto/update-delivery-status.dto";
 import { ProofOfDeliveryDto } from "./dto/proof-of-delivery.dto";
 import { DeliveryPostingService } from "./delivery-posting.service";
+import { PermissionsService } from "../auth/permissions.service";
 
 const deliveryInclude = {
   deliveryZone: true,
@@ -37,7 +38,22 @@ export class DeliveriesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly posting: DeliveryPostingService,
+    private readonly permissions: PermissionsService,
   ) {}
+
+  /**
+   * A "logistics.delivery.drive" account (Livreur) may only touch a delivery it is
+   * assigned to; a dispatcher/admin ("logistics.delivery.manage") can access any
+   * delivery in the company. Without this, any driver could guess another
+   * delivery's id and read its customer details or forge its status/GPS/proof of
+   * delivery — the companyId-only scoping on findOne() is not enough on its own.
+   */
+  private async assertCanAccessDelivery(storeId: string, userId: string, delivery: { driverId: string | null }) {
+    if (delivery.driverId === userId) return;
+    const granted = await this.permissions.getEffectivePermissions(userId, storeId);
+    if (granted.has("logistics.delivery.manage")) return;
+    throw new ForbiddenException("You can only access your own assigned deliveries");
+  }
 
   async create(companyId: string, dto: CreateDeliveryDto) {
     const zone = dto.deliveryZoneId
@@ -92,6 +108,13 @@ export class DeliveriesService {
     return mapDelivery(delivery);
   }
 
+  /** Driver-facing fetch (GET /logistics/deliveries/:id) — enforces the ownership check above. */
+  async findOneForDriver(companyId: string, storeId: string, userId: string, id: string) {
+    const delivery = await this.findOne(companyId, id);
+    await this.assertCanAccessDelivery(storeId, userId, delivery);
+    return delivery;
+  }
+
   async assignDriver(companyId: string, id: string, dto: AssignDriverDto) {
     const delivery = await this.findOne(companyId, id);
     if (delivery.status !== "PENDING") throw new BadRequestException(`Delivery ${delivery.number} is no longer pending dispatch`);
@@ -99,8 +122,9 @@ export class DeliveriesService {
     return mapDelivery(updated);
   }
 
-  async updateStatus(companyId: string, userId: string, id: string, dto: UpdateDeliveryStatusDto) {
+  async updateStatus(companyId: string, storeId: string, userId: string, id: string, dto: UpdateDeliveryStatusDto) {
     const delivery = await this.findOne(companyId, id);
+    await this.assertCanAccessDelivery(storeId, userId, delivery);
     if (!ALLOWED_TRANSITIONS[delivery.status].includes(dto.status)) {
       throw new BadRequestException(`Cannot move delivery ${delivery.number} from ${delivery.status} to ${dto.status}`);
     }
@@ -124,8 +148,9 @@ export class DeliveriesService {
   }
 
   /** Captures signature/QR proof and marks the delivery DELIVERED in one step — the only path to that status. */
-  async submitProofOfDelivery(companyId: string, userId: string, id: string, dto: ProofOfDeliveryDto) {
+  async submitProofOfDelivery(companyId: string, storeId: string, userId: string, id: string, dto: ProofOfDeliveryDto) {
     const delivery = await this.findOne(companyId, id);
+    await this.assertCanAccessDelivery(storeId, userId, delivery);
     if (delivery.status !== "IN_TRANSIT") {
       throw new BadRequestException(`Delivery ${delivery.number} must be in transit before proof of delivery can be captured`);
     }

@@ -30,6 +30,11 @@ export const PERMISSIONS: PermissionDefinition[] = [
   { code: "pos.sale.read", module: "POS", description: "Consulter les ventes" },
   { code: "pos.cashsession.manage", module: "POS", description: "Ouvrir/fermer une session de caisse" },
   { code: "pos.print.ticket", module: "POS", description: "Imprimer un ticket de caisse" },
+  {
+    code: "pos.price.override",
+    module: "POS",
+    description: "Modifier manuellement le prix d'un article en caisse (hors prix catalogue) — non accordé au Caissier par défaut",
+  },
 
   // --- Stock -------------------------------------------------------------------
   { code: "stock.product.manage", module: "STOCK", description: "Créer/modifier les fiches produit" },

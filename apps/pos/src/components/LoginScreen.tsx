@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { PasswordInput } from "@ixoris/ui";
+import { IxorisLogo, PasswordInput } from "@ixoris/ui";
 import { authApi, AuthUser, StoreSummary } from "../lib/auth-api";
 import { saveSession } from "../lib/session";
 import { useI18n } from "../lib/i18n-context";
@@ -151,7 +151,10 @@ export function LoginScreen({ onReady }: LoginScreenProps) {
         onSubmit={handleLogin}
         className="w-full max-w-sm space-y-4 rounded-xl bg-white p-6 shadow-xl dark:bg-slate-900"
       >
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-white">{t("pos.title")}</h1>
+        <div className="flex flex-col items-center gap-1 pb-1 text-center">
+          <IxorisLogo className="text-slate-900 dark:text-white" />
+          <p className="text-xs text-slate-500 dark:text-slate-400">{t("pos.title")}</p>
+        </div>
         <label className="block text-sm text-slate-600 dark:text-slate-300">
           {t("auth.email")}
           <input

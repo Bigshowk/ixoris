@@ -22,7 +22,9 @@ export const DEFAULT_ROLES: DefaultRoleDefinition[] = [
   {
     name: "Caissier",
     description: "Vente en caisse, sessions de caisse, impression de tickets",
-    permissions: [...byPrefix("pos."), "treasury.session.close"],
+    // "pos.price.override" is deliberately excluded from the default cashier grant — overriding a
+    // catalog price is a manager-level action; assign it explicitly to a custom role if needed.
+    permissions: [...byPrefix("pos.").filter((c) => c !== "pos.price.override"), "treasury.session.close"],
   },
   {
     name: "Gestionnaire de Stock",

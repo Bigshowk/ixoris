@@ -19,6 +19,8 @@ import { StockModule } from "./modules/stock/stock.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { SchedulerModule } from "./modules/scheduler/scheduler.module";
+import { HealthModule } from "./modules/health/health.module";
+import { LocalAiModule } from "./modules/local-ai/local-ai.module";
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { SchedulerModule } from "./modules/scheduler/scheduler.module";
     AdminModule,
     NotificationsModule,
     SchedulerModule,
+    HealthModule,
+    LocalAiModule,
   ],
 })
 export class AppModule {}

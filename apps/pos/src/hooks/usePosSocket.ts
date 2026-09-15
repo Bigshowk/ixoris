@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import type { CartDTO, SaleDTO } from "@ixoris/types";
 import { WS_URL } from "../lib/config";
+import { getAccessToken } from "../lib/tokens";
 
 export interface UsePosSocketOptions {
   storeId: string | null;
@@ -25,7 +26,9 @@ export function usePosSocket({ storeId, onCartUpdated, onSaleCompleted }: UsePos
   useEffect(() => {
     if (!storeId) return;
 
-    const socket = io(`${WS_URL}/pos`, { transports: ["websocket"] });
+    // The gateway now requires the same bearer token as the REST API (see apps/api's PosGateway) —
+    // without it, the connection is refused before it can join any store room.
+    const socket = io(`${WS_URL}/pos`, { transports: ["websocket"], auth: { token: getAccessToken() } });
     socketRef.current = socket;
 
     socket.on("connect", () => socket.emit("join:store", { storeId }));

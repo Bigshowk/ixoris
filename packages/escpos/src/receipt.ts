@@ -6,6 +6,7 @@
 import { formatCurrency, formatDateTime } from "../../i18n/src/format";
 import type { Locale } from "../../i18n/src/types";
 import { EscPosBuilder, PaperWidth } from "./builder";
+import { IXORIS_LOGO_BITMAP, IXORIS_LOGO_BITMAP_HEIGHT, IXORIS_LOGO_BITMAP_WIDTH } from "./ixoris-logo-bitmap";
 
 export interface ReceiptItem {
   name: string;
@@ -42,6 +43,8 @@ export interface SaleReceiptData {
   changeDue?: number;
   qrData?: string; // ex: lien de vérification / e-facture DGI
   footerMessage?: string;
+  /** Prints the IXORIS monogram above the store name. Defaults to true. */
+  showLogo?: boolean;
 }
 
 function money(value: number, currencyCode: string, locale: Locale) {
@@ -54,6 +57,9 @@ export function buildSaleReceipt(data: SaleReceiptData, paperWidth: PaperWidth =
   const locale = data.locale ?? "fr";
   const m = (value: number) => money(value, data.currencyCode, locale);
 
+  if (data.showLogo ?? true) {
+    b.align("center").rasterImage(IXORIS_LOGO_BITMAP, IXORIS_LOGO_BITMAP_WIDTH, IXORIS_LOGO_BITMAP_HEIGHT).feed(1);
+  }
   b.align("center").bold(true).doubleSize(true).line(data.storeName).doubleSize(false).bold(false);
   if (data.storeAddress) b.line(data.storeAddress);
   if (data.storePhone) b.line(`Tel: ${data.storePhone}`);

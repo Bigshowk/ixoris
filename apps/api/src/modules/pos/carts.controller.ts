@@ -31,7 +31,7 @@ export class CartsController {
   @Post(":id/items")
   @UsePipes(new ZodValidationPipe(addCartItemInputSchema))
   addItem(@Param("id") id: string, @Body() input: AddCartItemInput, @CurrentAuth() auth: AuthContext) {
-    return this.carts.addItem(auth.companyId, id, input);
+    return this.carts.addItem(auth.companyId, auth.storeId, auth.userId, id, input);
   }
 
   @Patch(":id/items/:itemId")

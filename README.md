@@ -3,6 +3,11 @@
 ERP intégré (Vente/POS, Comptabilité SYSCOHADA, RH/Paie, CRM, Chaîne d'approvisionnement, Livraison &
 Logistique) — architecture cross-platform, synchronisée en temps réel, offline-first, bilingue FR/EN.
 
+Édité par **KADERSYS SOFTWARE SYSTEMS**. Auteur & ingénierie : **Kader Salim**, ingénieur professionnel en
+informatique. Le détail (fiche technique, statut des services, crédits) est disponible dans l'application
+elle-même via le module **À propos** (`/a-propos`), et l'aide contextuelle via le module **Aide** (`/aide`) —
+voir [État d'avancement](#état-davancement).
+
 ## Stack
 
 | Domaine | Choix |
@@ -31,10 +36,11 @@ PROJET-IXORIS/
 │   │   ├── prisma/schema.prisma
 │   │   └── seed/
 │   ├── types/                    # DTOs / schémas Zod partagés front <-> back
-│   ├── ui/                        # Composants React partagés (ex: PasswordInput avec jauge de robustesse)
+│   ├── ui/                        # Composants React partagés (PasswordInput, IxorisLogo)
 │   ├── accounting-engine/          # Moteur SYSCOHADA : écritures, Bilan, Compte de résultat, SIG, rapprochement bancaire
 │   ├── payroll-engine/               # Calcul de paie, cotisations, génération bulletin
 │   ├── escpos/                        # Formatage tickets/bulletins pour imprimantes thermiques
+│   ├── local-ai/                       # Agent IA local (RAG hors-ligne, anomalies stock, suggestions comptables)
 │   ├── sync-client/                    # File offline IndexedDB + client WebSocket (hooks)
 │   ├── rbac/                            # Catalogue de permissions + rôles prédéfinis (dont Livreur)
 │   ├── i18n/                              # Dictionnaires FR/EN partagés (frontend + messages backend)
@@ -67,6 +73,53 @@ PROJET-IXORIS/
 | K. Contrôle du crédit & Recouvrement | module `credit-control`, tables `PaymentInstallment`, `Customer.isBlocked` |
 | L. Actifs & Amortissements (classe 2 OHADA) | module `fixed-assets`, tables `FixedAsset/DepreciationEntry` |
 | M. GED & Workflows d'approbation | module `documents`, tables `Document/ApprovalRule/ApprovalRequest` |
+| N. Sécurité — Auth/MFA, rate-limiting, WebSocket authentifié | `apps/api/src/modules/auth`, `modules/realtime/pos.gateway.ts` — voir [Sécurité & durcissement](#sécurité--durcissement) |
+| O. Agent IA Local (Offline AI) | `packages/local-ai`, module `apps/api/src/modules/local-ai`, onglet `apps/web/aide` — voir [Agent IA Local](#agent-ia-local-offline-ai) |
+
+## Sécurité & durcissement
+
+Un audit d'architecture et de sécurité complet (authentification/RBAC, synchronisation hors-ligne, injection/XSS) a été mené sur l'ensemble du monorepo. Le détail complet — méthodologie, constats fichier:ligne, correctifs appliqués et recommandations restantes — est consigné dans **[RAPPORT_SECURITE_ET_REMEDS.md](RAPPORT_SECURITE_ET_REMEDS.md)**. Correctifs notables déjà appliqués :
+
+- **Authentification** : l'API refuse de démarrer sans un vrai `JWT_SECRET` (fin du secret par défaut codé en dur) ; limitation de débit (anti brute-force) sur `/auth/login` et `/auth/mfa/verify` ; détection de réutilisation de refresh token avec révocation de session en cascade ; révocation des sessions actives au changement de mot de passe.
+- **Canal temps réel POS** : le namespace WebSocket `/pos` exige désormais le même jeton d'accès que l'API REST, avec vérification que le magasin rejoint appartient bien à la société de l'appelant (isolation multi-tenant).
+- **Caisse (POS)** : nouvelle permission dédiée `pos.price.override` (non accordée au Caissier par défaut) pour toute modification manuelle de prix ; toute remise est plafonnée serveur au total de la ligne ; correction d'un accès possible à un article d'un autre panier.
+- **Livraison** : un livreur ne peut plus consulter ni modifier une livraison qui ne lui est pas assignée (sauf détenteur de `logistics.delivery.manage`).
+- **Validation des entrées** : `ValidationPipe` rejette désormais (plutôt que de silencieusement ignorer) tout champ non attendu dans une requête ; limite de taille de corps de requête explicite.
+- **Assainissement (SQL/XSS)** : audit exhaustif — aucune requête SQL brute non paramétrée, aucun contournement de l'échappement HTML par défaut de React identifié dans le code actuel.
+
+## Agent IA Local (Offline AI)
+
+`packages/local-ai` (framework-agnostic) + module `apps/api/src/modules/local-ai` exposent un assistant IA **hybride, entièrement local** : un vrai LLM génératif quand un serveur d'inférence local est disponible, avec repli automatique et transparent sur un moteur de recherche documentaire (RAG léger) sinon. Dans les deux cas, **aucun appel réseau sortant vers l'extérieur, aucune clé API, aucune donnée envoyée à un service tiers** — tout tourne sur la machine du client.
+
+### Architecture hybride (LLM local + RAG)
+
+1. **Fournisseur d'inférence local** — `packages/local-ai/src/llm-provider.ts` (`OllamaProvider`) parle le protocole HTTP d'[Ollama](https://ollama.com) (`GET /api/tags`, `POST /api/generate`), le standard de facto pour exécuter des modèles quantifiés (Mistral, Llama 3, Phi-3...) sur une seule machine. Tout autre serveur compatible (le binaire `server` de llama.cpp, LM Studio) fonctionne sans modification, tant qu'il expose les deux mêmes routes.
+2. **Détection automatique** — `packages/local-ai/src/hybrid-assistant.ts` sonde `OLLAMA_BASE_URL` (défaut `http://localhost:11434`) avec un délai court (1,5 s), mis en cache 30 s pour ne pas resonder le réseau à chaque frappe. Un modèle disponible est choisi par ordre de préférence (`phi3:mini` → `mistral:7b-instruct` → `llama3:8b`), sinon le premier modèle installé.
+3. **Génération de réponse raisonnée** — si un LLM est détecté : le RAG (`retrieval.ts`, recherche TF-IDF) extrait d'abord les passages pertinents de la documentation, `prompt-builder.ts` construit un prompt structuré (rôle d'expert IXORIS + contexte extrait + question), puis le LLM local génère une réponse synthétique en français, citée avec ses sources. **Aucune dépendance au réseau Internet à aucune étape.**
+4. **Repli hybride sans erreur** — si aucun serveur LLM n'est détecté, **ou** si l'appel échoue pour n'importe quelle raison (serveur qui plante, mémoire insuffisante, timeout), l'assistant bascule silencieusement sur le moteur RAG extractif (réponse = passage documentaire le plus pertinent, sans génération de texte) — jamais d'erreur exposée à l'utilisateur. Le statut réel est exposé via `GET /local-ai/status` et affiché dans l'onglet **Aide** :
+   - `Statut IA : Agent LLM Local Actif (Hors-ligne)` — un serveur Ollama répond, la réponse est générée.
+   - `Statut IA : Mode RAG Léger (LLM non détecté)` — repli automatique, réponse extractive.
+
+### Installer et lancer le LLM local (Ollama)
+
+Optionnel — l'ERP fonctionne sans, en mode RAG léger. Pour activer la génération :
+
+```bash
+# 1. Installer Ollama (Windows/macOS/Linux) : https://ollama.com/download
+# 2. Télécharger un modèle d'instruction léger (choisir selon la RAM disponible) :
+ollama pull phi3:mini            # ~2,3 Go — recommandé sur poste standard (8-16 Go RAM)
+# ou : ollama pull mistral:7b-instruct   # ~4,1 Go — meilleure qualité, 16 Go+ RAM recommandés
+# 3. Démarrer le serveur (généralement automatique après installation) :
+ollama serve
+```
+
+Dès qu'`ollama serve` répond sur `http://localhost:11434` (même machine que l'API), l'onglet Aide bascule automatiquement sur `Agent LLM Local Actif` au prochain rafraîchissement du statut — aucune configuration côté IXORIS n'est nécessaire au-delà de la variable optionnelle `OLLAMA_BASE_URL` (voir `.env.example`) si Ollama tourne sur une autre adresse.
+
+### Les trois capacités (accessibles via l'API)
+
+1. **Super-Assistant Support (`POST /local-ai/ask`, `GET /local-ai/status`)** — décrit ci-dessus, intégré à l'onglet **Aide** (`apps/web/aide`) sous forme d'un champ de question en langage naturel avec badge de statut du moteur.
+2. **Détection d'anomalies de stock (`GET /local-ai/stock/anomalies`)** — `packages/local-ai/src/anomaly-detection.ts` : statistiques déterministes et explicables sur les mouvements de stock récents (stock négatif, écart-type/z-score par rapport à l'historique du produit, ajustements manuels sans référence, corrections répétées en moins de 24h) — chaque anomalie porte une justification en langage clair, pas de boîte noire. Reste volontairement à base de règles (pas de génération LLM) pour garder ces alertes 100 % explicables et auditables.
+3. **Suggestion d'écritures comptables (`POST /local-ai/accounting/suggest-entry`)** — `packages/local-ai/src/accounting-suggest.ts` : suggère des comptes du plan SYSCOHADA à partir d'une description libre (mots-clés), pour accélérer la saisie manuelle — ne poste jamais d'écriture automatiquement, l'utilisateur garde toujours la décision finale.
 
 ## Schéma de base de données
 
@@ -164,7 +217,7 @@ Le fichier `.env` (racine, lu par toutes les apps via Turborepo) contient :
 |---|---|---|
 | `DATABASE_URL` | Connexion Prisma → Postgres | `postgresql://ixoris:ixoris@localhost:5432/ixoris_erp` |
 | `REDIS_URL` | Connexion Redis | `redis://localhost:6379` |
-| `JWT_SECRET` | Signature des tokens d'accès/refresh | ⚠️ à changer en prod |
+| `JWT_SECRET` | Signature des tokens d'accès/refresh | **obligatoire** — l'API refuse de démarrer si absent ou laissé à `"change-me"` (voir [Sécurité & durcissement](#sécurité--durcissement)) |
 | `JWT_EXPIRES_IN` / `REFRESH_TOKEN_EXPIRES_IN` | Durées de vie des tokens | `1d` / `30d` |
 | `API_PORT` | Port HTTP de `apps/api` | `4000` |
 | `CORS_ORIGIN` | Origines autorisées côté API | `http://localhost:3000,http://localhost:3001,http://localhost:3002` — **doit inclure le port de chaque frontend lancé** (web/pos/delivery) sous peine d'erreurs réseau silencieuses côté navigateur |
@@ -172,6 +225,7 @@ Le fichier `.env` (racine, lu par toutes les apps via Turborepo) contient :
 | `NEXT_PUBLIC_WS_URL` | URL du WebSocket (sync temps réel POS) | `ws://localhost:4001` |
 | `NOTIFICATION_MODE` | `log` (défaut, sûr) ou `live` (envoi réel SMTP/Twilio) | `log` |
 | `SMTP_*` / `TWILIO_*` | Identifiants des fournisseurs de notification réels | vides — uniquement nécessaires si `NOTIFICATION_MODE=live` |
+| `OLLAMA_BASE_URL` | Adresse du serveur LLM local pour l'Agent IA (voir [Agent IA Local](#agent-ia-local-offline-ai)) | `http://localhost:11434` — optionnel, repli automatique sur le RAG léger si injoignable |
 
 ### 4. Installation des dépendances
 
@@ -254,6 +308,9 @@ Une fois `pnpm db:seed` exécuté, utiliser les [identifiants de démonstration]
 - ✅ **GED & workflows d'approbation — fonctionnel** : `apps/api/src/modules/documents` — pièces jointes polymorphes (`Document.attachableType`/`attachableId`, même convention que `AuditLog`/`StockMovement`) attachables à une facture, écriture, employé, actif ou bon de commande ; règles d'approbation configurables par seuil (`ApprovalRule.minAmount` + rôle requis) sur les bons de commande et les dépenses de caisse — au-delà du seuil, l'envoi du bon de commande (`POST /supply-chain/purchase-orders/:id/send`) ou le postage de la dépense (`POST /treasury/cashboxes/movements/:id/post`) est retenu jusqu'à ce qu'un titulaire du rôle requis approuve (`POST /approvals/requests/:id/decide`).
 - ✅ **`apps/web` (back-office) — fonctionnel** : écrans pour tous les modules ci-dessus (dashboard temps réel avec notifications, comptabilité, paie, RH, CRM, stock, achats, livraisons + carte de suivi GPS, trésorerie, crédit, actifs, GED, administration).
 - ✅ **Sécurité — MFA (TOTP) & robustesse du mot de passe — fonctionnel** : [`packages/ui`](packages/ui) fournit un composant `PasswordInput` partagé (bascule affichage/masquage, jauge de robustesse à 5 niveaux avec indices de critères manquants) intégré aux écrans de connexion des 3 apps, à la création d'utilisateur (admin) et au changement de mot de passe. Le module `auth` gagne une authentification à deux facteurs TOTP (RFC 6238/4226) **implémentée nativement sur `crypto`** (aucune dépendance externe — `otplib`/`qrcode` indisponibles sans accès réseau dans cet environnement) : `POST /auth/mfa/setup|enable|disable`, connexion en 2 étapes (`POST /auth/login` renvoie un `mfaToken` transitoire si le MFA est actif, échangé contre les tokens finaux via `POST /auth/mfa/verify`), 10 codes de secours à usage unique générés à l'activation (hashés en base, jamais stockés en clair). Auto-enrôlement en libre-service via le nouvel écran `apps/web/profil` (QR code rendu côté navigateur via `qrcode` chargé en CDN au runtime — même pattern que Leaflet pour la carte logistique — avec repli "saisie manuelle" du secret) ; un administrateur peut rendre le MFA obligatoire par utilisateur (`User.mfaRequired`, bouton "Exiger le MFA" dans `apps/web/admin`), auquel cas un écran de blocage (présent sur les 3 apps) retient l'utilisateur jusqu'à configuration effective.
+- ✅ **Branding, module Aide & module À propos — fonctionnel** : logo officiel **IXORIS** (monogramme "anneau ouvert + flèche" validé avec l'éditeur), composant [`IxorisLogo`](packages/ui/src/IxorisLogo.tsx) partagé et intégré à la navigation d'`apps/web`, aux écrans de connexion d'`apps/pos`/`apps/delivery`, aux bulletins de paie PDF (`packages/payroll-engine`, dessiné en vecteur natif PDFKit — aucune image rasterisée) et aux tickets de caisse thermiques (`packages/escpos`, bitmap monochrome généré depuis la même géométrie, commande ESC/POS `GS v 0`). Nouvelle page `apps/web/a-propos` : crédits éditeur (Kader Salim / KADERSYS SOFTWARE SYSTEMS), fiche technique, et **statut des services en direct** (API + base de données via un nouvel endpoint public `GET /health` côté `apps/api`, WebSocket, moteur hors-ligne détecté côté navigateur). Nouvelle page `apps/web/aide` : centre d'aide avec recherche et filtre par domaine (Caisse, Stock, Comptabilité, RH/Paie, Logistique) sur des guides condensés à partir de [GUIDE_UTILISATEUR_COMPLET.md](GUIDE_UTILISATEUR_COMPLET.md), plus le tableau de dépannage intégré.
+- ✅ **Audit de sécurité & durcissement — fonctionnel** : voir [Sécurité & durcissement](#sécurité--durcissement) ci-dessus et [RAPPORT_SECURITE_ET_REMEDS.md](RAPPORT_SECURITE_ET_REMEDS.md) pour le détail complet (JWT à secret obligatoire, rate-limiting login/MFA, WebSocket POS authentifié, permission dédiée pour l'override de prix en caisse, isolation chauffeur sur les livraisons, révocation de session en cascade, validation stricte des entrées).
+- ✅ **Agent IA Local (Offline AI) — architecture hybride fonctionnelle** : voir [Agent IA Local](#agent-ia-local-offline-ai) ci-dessus — [`packages/local-ai`](packages/local-ai) fournit un assistant support **génératif** (LLM local via Ollama, avec repli automatique sur un RAG extractif si aucun serveur LLM n'est détecté) intégré à l'onglet Aide avec badge de statut en direct, une détection d'anomalies de stock et un assistant de suggestion d'écritures comptables — le tout 100 % local, sans appel réseau externe ni clé API. La passerelle d'inférence (`packages/local-ai/src/llm-provider.ts`) a été vérifiée contre un faux serveur Ollama (voir Limites connues) faute de pouvoir installer un vrai modèle dans cet environnement de développement sans accès réseau ; le chemin de repli RAG, lui, a été testé en conditions réelles.
 - ⏳ **À construire** : écrans d'administration fine des rôles/permissions (au-delà de la gestion des utilisateurs déjà présente), retro-conversion i18n complète du reste de l'UI POS.
 
 ### Limites connues (à lever avant prod)
@@ -284,6 +341,16 @@ Une fois `pnpm db:seed` exécuté, utiliser les [identifiants de démonstration]
 - Le QR code d'activation MFA (`apps/web/profil`) charge la lib `qrcode` depuis un CDN au runtime navigateur — nécessite que le navigateur de l'utilisateur final ait accès à internet (repli "saisie manuelle du secret" toujours disponible sinon), même caveat que la carte Leaflet du module logistique.
 - Un code TOTP n'est pas protégé contre la réutilisation immédiate dans sa fenêtre de 30s (contrairement aux codes de secours, à usage unique) — simplification courante pour ce type d'implémentation, à durcir (verrou anti-rejeu par utilisateur) avant un usage à haute exigence de sécurité.
 - La configuration du MFA (scan du QR, activation/désactivation) n'existe que sur `apps/web` — un utilisateur de `apps/pos`/`apps/delivery` dont le MFA est rendu obligatoire doit se connecter une fois au back-office pour le configurer ; ces deux apps n'affichent qu'un écran de blocage renvoyant vers le back-office.
+- Le logo IXORIS imprimé sur les tickets thermiques (`packages/escpos`) utilise la commande raster ESC/POS `GS v 0`, générée et vérifiée par simulation logicielle (aperçu bitmap) — elle n'a pas pu être testée sur une imprimante thermique physique dans cet environnement ; à valider sur le matériel cible avant une mise en production (`showLogo: false` permet de le désactiver ticket par ticket en attendant).
+- Il n'existe pas encore de génération de facture PDF dédiée (contrairement au bulletin de paie) — le module Comptabilité gère les factures comme des données consultables/imprimables depuis le navigateur, pas comme un export PDF avec en-tête et logo ; à ajouter si un PDF de facture "officiel" est requis.
+- La mention légale de la page À propos utilise volontairement la formulation "aligné sur le plan comptable SYSCOHADA Révisé" plutôt que "certifié conforme" — le moteur comptable est correct et testé (voir plus haut), mais aucune certification tierce n'a été obtenue ; à ajuster si une telle certification est un jour réalisée.
+- Le limiteur de débit sur `/auth/login`/`/auth/mfa/verify` est en mémoire de processus — protège une instance unique ; un déploiement multi-instance devrait migrer ce compteur vers Redis (même remarque que la salle WebSocket du POS).
+- `PermissionsGuard` laisse passer toute route authentifiée sans `@RequirePermissions(...)` explicite (voir [RAPPORT_SECURITE_ET_REMEDS.md](RAPPORT_SECURITE_ET_REMEDS.md) §1.9) — aucune route sensible n'en dépend aujourd'hui, mais c'est un point de vigilance pour tout nouveau contrôleur.
+- La file hors-ligne du POS n'a pas de clé d'idempotence — un rejeu concurrent (ex. deux événements `online` successifs) peut, en théorie, dupliquer un ajout d'article (voir rapport §2.2).
+- `apps/delivery` n'a pas de file hors-ligne (contrairement à `apps/pos`) — une perte de connexion pendant une mise à jour de statut ou une preuve de livraison fait échouer l'action plutôt que de la mettre en attente (voir rapport §2.3).
+- La passerelle LLM local (`packages/local-ai/src/llm-provider.ts`, protocole Ollama) a été implémentée et vérifiée contre un faux serveur HTTP imitant les routes `/api/tags`/`/api/generate` d'Ollama — cet environnement de développement n'a pas d'accès réseau pour installer un vrai serveur Ollama ni télécharger un modèle. Le contrat d'API suivi est celui documenté officiellement par Ollama ; à confirmer avec une instance réelle avant mise en production. Le chemin de repli RAG (quand aucun LLM n'est détecté), lui, a été testé en conditions réelles dans le navigateur.
+- Le détecteur de serveur LLM (`getLlmStatus`) met en cache le résultat 30 secondes — démarrer ou arrêter `ollama serve` pendant qu'un utilisateur a l'onglet Aide déjà ouvert peut donc prendre jusqu'à 30 secondes avant que le badge de statut ne se mette à jour.
+- La génération LLM est en mode requête/réponse unique (`stream: false`), pas en flux — une réponse volumineuse sur un modèle lent s'affiche d'un bloc à la fin plutôt que mot par mot ; suffisant pour des réponses courtes (3-6 phrases imposées par le prompt système) mais une future évolution chat plus longue gagnerait à passer en streaming (SSE).
 
 ## Identifiants de démonstration (après `pnpm db:seed`)
 

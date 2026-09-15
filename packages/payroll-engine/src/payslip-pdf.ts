@@ -1,6 +1,26 @@
 import PDFDocument from "pdfkit";
 import { PayslipResult } from "./types";
 
+const LOGO_NAVY = "#132A46";
+const LOGO_GOLD = "#C9973A";
+
+/**
+ * Draws the IXORIS monogram (same 0..140 geometry as `packages/ui/src/IxorisLogo.tsx`
+ * and the thermal-ticket raster logo in `packages/escpos`) as native PDF vector paths —
+ * no rasterized image asset needed, so it always renders crisp at any size.
+ */
+function drawIxorisMark(doc: PDFKit.PDFDocument, x: number, y: number, size: number) {
+  const scale = size / 140;
+  doc.save();
+  doc.translate(x, y).scale(scale);
+  doc.roundedRect(0, 0, 140, 140, 28).fill(LOGO_NAVY);
+  doc.lineCap("round");
+  doc.path("M106.25 86.9 A40 40 0 1 1 86.9 33.75").lineWidth(7).stroke(LOGO_GOLD);
+  doc.path("M86.9 33.75 L96.2 13.8").lineWidth(7).stroke(LOGO_GOLD);
+  doc.polygon([101.3, 2.9], [105.15, 13.58], [90.65, 6.82]).fill(LOGO_GOLD);
+  doc.restore();
+}
+
 export interface PayslipPdfCompanyInfo {
   companyName: string;
   companyAddress?: string;
@@ -33,10 +53,19 @@ export function buildPayslipPdf(input: BuildPayslipPdfInput): Promise<Buffer> {
     const symbol = input.currencySymbol ?? "XOF";
     const money = (n: number) => `${n.toLocaleString("fr-FR", { minimumFractionDigits: 0 })} ${symbol}`;
 
-    doc.fontSize(16).text(input.company.companyName);
-    if (input.company.companyAddress) doc.fontSize(9).fillColor("#555555").text(input.company.companyAddress);
-    if (input.company.taxId) doc.fontSize(9).text(`NIF: ${input.company.taxId}`);
+    const headerX = doc.x;
+    const headerY = doc.y;
+    const markSize = 30;
+    const textX = headerX + markSize + 10;
+    const textWidth = 520 - markSize - 10;
+    drawIxorisMark(doc, headerX, headerY, markSize);
+
+    doc.fontSize(16).text(input.company.companyName, textX, headerY, { width: textWidth });
+    if (input.company.companyAddress) doc.fontSize(9).fillColor("#555555").text(input.company.companyAddress, textX, doc.y, { width: textWidth });
+    if (input.company.taxId) doc.fontSize(9).text(`NIF: ${input.company.taxId}`, textX, doc.y, { width: textWidth });
     doc.fillColor("#000000");
+    doc.x = headerX;
+    doc.y = Math.max(doc.y, headerY + markSize);
     doc.moveDown();
 
     doc.fontSize(14).text(`Bulletin de paie — ${input.period}`, { align: "center" });

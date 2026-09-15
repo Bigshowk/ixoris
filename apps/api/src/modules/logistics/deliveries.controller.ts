@@ -34,7 +34,7 @@ export class DeliveriesController {
   @Get(":id")
   @RequirePermissions("logistics.delivery.drive")
   findOne(@Param("id") id: string, @CurrentAuth() auth: AuthContext) {
-    return this.deliveries.findOne(auth.companyId, id);
+    return this.deliveries.findOneForDriver(auth.companyId, auth.storeId, auth.userId, id);
   }
 
   @Patch(":id/assign")
@@ -46,12 +46,12 @@ export class DeliveriesController {
   @Patch(":id/status")
   @RequirePermissions("logistics.delivery.drive")
   updateStatus(@Param("id") id: string, @Body() dto: UpdateDeliveryStatusDto, @CurrentAuth() auth: AuthContext) {
-    return this.deliveries.updateStatus(auth.companyId, auth.userId, id, dto);
+    return this.deliveries.updateStatus(auth.companyId, auth.storeId, auth.userId, id, dto);
   }
 
   @Post(":id/proof-of-delivery")
   @RequirePermissions("logistics.delivery.drive")
   submitProofOfDelivery(@Param("id") id: string, @Body() dto: ProofOfDeliveryDto, @CurrentAuth() auth: AuthContext) {
-    return this.deliveries.submitProofOfDelivery(auth.companyId, auth.userId, id, dto);
+    return this.deliveries.submitProofOfDelivery(auth.companyId, auth.storeId, auth.userId, id, dto);
   }
 }
